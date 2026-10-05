@@ -47,7 +47,7 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: python tests/check_rules.py --online
 
-      - name: Convert to Elastic and Kusto, flag unmapped fields
+      - name: Convert to Elastic, Kusto and Splunk; flag unmapped fields
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: python tests/convert_rules.py --out build
 

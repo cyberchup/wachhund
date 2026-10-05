@@ -1,8 +1,9 @@
 """Convert every rule for each target in pipelines/targets.yml and flag unmapped fields.
 
 Writes one file per rule and target under the output folder; CI uploads it as the
-`platform-queries` artifact. Exits non-zero if a rule fails to convert for any target, or
-uses a field that no pipeline maps for that target.
+`platform-queries` artifact. Exits non-zero if a rule fails to convert for a required
+target, or uses a field that no pipeline maps for it. Problems with best-effort targets
+(`required: false`) are reported but don't fail the run.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ class Result:
     target: str
     problem: str | None = None
     output: str | None = None
+    required: bool = True
 
 
 def pick_route(rule: SigmaRule, routes: list[dict]) -> dict | None:
@@ -65,7 +67,7 @@ def unmapped_fields(rules: list[SigmaRule], pipeline: ProcessingPipeline, fallba
 
 
 def convert(rule_path: Path, target: str, config: dict, out_dir: Path, root: Path = ROOT) -> Result:
-    result = Result(rel(rule_path, root), target)
+    result = Result(rel(rule_path, root), target, required=bool(config.get("required", True)))
     try:
         collection = SigmaCollection.from_yaml(rule_path.read_text(encoding="utf-8"))
     except SigmaError as error:
@@ -115,6 +117,11 @@ def run(root: Path = ROOT, out_dir: Path | None = None, rule_files: list[Path] |
     ]
 
 
+def exit_code(results: list[Result]) -> int:
+    """Fail only on problems with required targets."""
+    return 1 if any(result.problem and result.required for result in results) else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Convert rules for every target and flag unmapped fields.")
     parser.add_argument("--out", type=Path, default=ROOT / "build", help="output folder (default: build/)")
@@ -123,17 +130,20 @@ def main(argv: list[str] | None = None) -> int:
 
     results = run(out_dir=args.out.resolve(), rule_files=[path.resolve() for path in args.rules] or None)
     for result in results:
-        status = "FAIL" if result.problem else "OK  "
+        status = "OK  " if not result.problem else "FAIL" if result.required else "WARN"
         print(f"{status}  {result.target:8} {result.rule}  {result.problem or result.output}")
-    failed = [result for result in results if result.problem]
-    print(f"\n{len(results)} conversions, {len(results) - len(failed)} succeeded, {len(failed)} failed")
+    failed = [result for result in results if result.problem and result.required]
+    warned = [result for result in results if result.problem and not result.required]
+    succeeded = len(results) - len(failed) - len(warned)
+    print(f"\n{len(results)} conversions: {succeeded} succeeded, {len(failed)} failed, {len(warned)} best-effort warnings")
 
-    summary = [f"### Conversion: {len(results) - len(failed)} of {len(results)} succeeded"]
-    if failed:
-        summary += ["", "| Rule | Target | Problem |", "| --- | --- | --- |"]
-        summary += [f"| `{r.rule}` | {r.target} | {r.problem} |" for r in failed]
+    summary = [f"### Conversion: {succeeded} of {len(results)} succeeded"]
+    for title, problems in (("Failed (required targets)", failed), ("Best-effort warnings (don't fail CI)", warned)):
+        if problems:
+            summary += ["", f"**{title}**", "", "| Rule | Target | Problem |", "| --- | --- | --- |"]
+            summary += [f"| `{r.rule}` | {r.target} | {r.problem} |" for r in problems]
     write_step_summary("\n".join(summary))
-    return 1 if failed else 0
+    return exit_code(results)
 
 
 if __name__ == "__main__":
