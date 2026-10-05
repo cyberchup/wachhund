@@ -6,7 +6,7 @@ source of truth; platform queries are build artifacts.
 - **Repo:** github.com/cyberchup/wachhund (canonical)
 - **CI:** GitHub Actions
 - **Targets:** Elastic (primary, validated in hauslab) and Kusto (Defender XDR /
-  Sentinel). Cortex XDR and SentinelOne are best-effort.
+  Sentinel). Cortex XDR, SentinelOne and Splunk are best-effort.
 
 ## For every Sigma rule you write or review
 
@@ -17,6 +17,8 @@ source of truth; platform queries are build artifacts.
   and benign events.
 - Confirm it converts on both primary targets and flag any field that needs a
   custom pipeline mapping.
+- Follow [WORKFLOW.md](WORKFLOW.md): work on a branch and open a pull request;
+  don't commit to `main`.
 
 ## Commands
 

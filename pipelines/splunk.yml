@@ -1,0 +1,17 @@
+# Custom Splunk field mappings. Runs before the built-in pipeline (priority 10 vs
+# splunk_windows' 20), so a mapping here overrides the built-in one for that field.
+#
+# Splunk is a best-effort target: add a mapping when a Splunk environment names a field
+# differently from Sigma. Example:
+#
+#     - id: splunk_custom_process_creation
+#       type: field_name_mapping
+#       mapping:
+#           SomeSigmaField: splunk_field_name
+#       rule_conditions:
+#           - type: logsource
+#             category: process_creation
+#             product: windows
+name: custom_splunk
+priority: 10
+transformations: []

@@ -6,11 +6,14 @@
 # built-in ones, so they run first and their mappings win.
 #
 # `options` are passed to the pySigma backend, e.g. `index_names` for Elastic.
+# `required: false` makes a target best-effort: its problems are reported in the CI
+# summary but don't fail CI.
 
 elastic:
     backend: lucene
     format: siem_rule_ndjson
     extension: ndjson
+    required: true
     # A field counts as mapped only if a field-mapping step other than these catch-alls
     # renamed it. ecs_windows sends every field it doesn't know to winlog.event_data.<Field>,
     # which often doesn't exist in Elastic data, so that alone isn't a mapping.
@@ -28,6 +31,7 @@ kusto:
     backend: kusto
     format: default
     extension: kql
+    required: true
     # The built-in Kusto pipelines reject fields that aren't valid for the target table,
     # so no extra mapping check is needed here.
     require_mapped_fields: false
@@ -38,3 +42,17 @@ kusto:
         # Everything else: Defender XDR advanced hunting tables (also queryable in Sentinel
         # through the Defender XDR connector). Unsupported logsources fail conversion.
         - pipelines: [pipelines/kusto.yml, microsoft_xdr]
+
+splunk:
+    backend: splunk
+    format: default
+    extension: spl
+    required: false
+    # splunk_windows keeps Sigma's field names (the Windows event field names, such as
+    # Image and CommandLine), so there's no mapping step to check. Whether Splunk has
+    # those fields depends on how it indexes the events.
+    require_mapped_fields: false
+    routes:
+        - when: {product: windows}
+          pipelines: [pipelines/splunk.yml, splunk_windows]
+        - pipelines: [pipelines/splunk.yml]

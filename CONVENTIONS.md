@@ -11,7 +11,8 @@ Checked on 2026-10-05 against Sigma specification v2.1.0, SigmaHQ's validators,
 and MITRE ATT&CK v19.2 (see [Sources](#sources)). Where SigmaHQ's prose docs and
 its validators disagree, this file follows the validators, because they are what
 SigmaHQ's CI enforces. CI checks most of this file automatically; see
-[Tests and CI](#9-tests-and-ci).
+[Tests and CI](#9-tests-and-ci). The order of work, from branch to hauslab
+validation, is in [WORKFLOW.md](WORKFLOW.md).
 
 ## 1. Folder layout
 
@@ -495,7 +496,7 @@ problem:
 | `yamllint --strict .` | YAML formatting breaks section 3, including CRLF line endings |
 | `sigma check ... rules*` | any pySigma or SigmaHQ validator reports an issue (all validators are on, a superset of SigmaHQ's set) |
 | `python tests/check_rules.py --online` | a rule breaks a **Repo rule** in this file |
-| `python tests/convert_rules.py` | a rule doesn't convert for Elastic or Kusto, or uses a field no pipeline maps |
+| `python tests/convert_rules.py` | a rule doesn't convert for Elastic or Kusto, or uses a field no pipeline maps (Splunk problems are reported but don't fail CI) |
 | `python tests/regression_tests_runner.py` | a true-positive sample doesn't match, or a benign one does |
 
 Conversion picks each target's backend and pipelines by logsource, as set in
@@ -509,9 +510,13 @@ Conversion picks each target's backend and pipelines by logsource, as set in
   Windows Security log rules go to Sentinel's `SecurityEvent` table through
   `azure_monitor`. Sentinel ASIM isn't used: in pySigma-backend-kusto 1.0.1 its
   pipeline fails on `OriginalFileName`.
+- **Splunk (best-effort):** plain SPL through `splunk_windows`, which keeps
+  Sigma's field names (the Windows event field names). The queries aren't scoped
+  to an index; add yours when deploying. Problems are reported in the CI summary
+  but don't fail CI.
 - Converted queries are uploaded as the `platform-queries` artifact:
-  `elastic/*.ndjson` (importable in Kibana) and `kusto/*.kql`. They're build
-  output and are never committed.
+  `elastic/*.ndjson` (importable in Kibana), `kusto/*.kql` and `splunk/*.spl`.
+  They're build output and are never committed.
 
 When conversion flags a field, add a mapping to `pipelines/elastic.yml` or
 `pipelines/kusto.yml` that points at a field hauslab's data really has. Don't

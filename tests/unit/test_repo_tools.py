@@ -103,8 +103,10 @@ def test_clean_fixture_passes_everything(tmp_path):
     outcomes = regression_tests_runner.run(root)
     assert [(o.test, o.passed) for o in outcomes] == [("Positive Detection Test", True), ("Benign Look-alike Test", True)]
     results = convert_rules.run(root, out_dir=tmp_path / "build")
-    assert [(r.target, r.problem) for r in results] == [("elastic", None), ("kusto", None)]
+    assert [(r.target, r.problem) for r in results] == [("elastic", None), ("kusto", None), ("splunk", None)]
+    assert convert_rules.exit_code(results) == 0
     assert "hauslab_fixture.exe" in (tmp_path / "build" / "kusto" / "proc_creation_win_hauslab_fixture_child.kql").read_text()
+    assert 'ParentImage="*\\\\hauslab_fixture.exe"' in (tmp_path / "build" / "splunk" / "proc_creation_win_hauslab_fixture_child.spl").read_text()
     elastic_rule = json.loads((tmp_path / "build" / "elastic" / "proc_creation_win_hauslab_fixture_child.ndjson").read_text())
     assert elastic_rule["rule_id"] == RULE_ID
 
@@ -207,7 +209,20 @@ def test_convert_flags_unmapped_fields_until_mapped(tmp_path):
         encoding="utf-8",
     )
     results = {r.target: r.problem for r in convert_rules.run(root, out_dir=tmp_path / "build")}
-    assert results == {"elastic": None, "kusto": None}
+    assert results == {"elastic": None, "kusto": None, "splunk": None}
+
+
+def test_best_effort_target_warns_without_failing(tmp_path):
+    root = make_repo(tmp_path)
+    targets = root / "pipelines/targets.yml"
+    targets.write_text(targets.read_text(encoding="utf-8").replace("splunk_windows]", "no_such_pipeline]"), encoding="utf-8")
+    results = convert_rules.run(root, out_dir=tmp_path / "build")
+    splunk = next(r for r in results if r.target == "splunk")
+    assert splunk.problem and not splunk.required
+    assert convert_rules.exit_code(results) == 0
+    # The same problem on a required target fails the run.
+    targets.write_text(targets.read_text(encoding="utf-8").replace("required: false", "required: true"), encoding="utf-8")
+    assert convert_rules.exit_code(convert_rules.run(root, out_dir=tmp_path / "build")) == 1
 
 
 def test_convert_flags_fields_the_kusto_table_lacks(tmp_path):
