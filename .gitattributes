@@ -1,0 +1,3 @@
+# Sigma rules and test data must use LF line endings, including on Windows checkouts.
+* text=auto eol=lf
+*.evtx binary

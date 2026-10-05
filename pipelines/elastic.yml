@@ -1,0 +1,19 @@
+# Custom Elastic field mappings. Runs before the built-in pipeline (priority 10 vs
+# ecs_windows' 20), so a mapping here overrides the built-in one for that field.
+#
+# Add a mapping when tests/convert_rules.py reports an unmapped field. Map to the field
+# name that hauslab's Elastic data actually uses; check a real document before adding one.
+# Example, if hauslab ships Sysmon through Elastic Agent and keeps the value under
+# winlog.event_data:
+#
+#     - id: elastic_custom_process_creation
+#       type: field_name_mapping
+#       mapping:
+#           IntegrityLevel: winlog.event_data.IntegrityLevel
+#       rule_conditions:
+#           - type: logsource
+#             category: process_creation
+#             product: windows
+name: custom_elastic
+priority: 10
+transformations: []

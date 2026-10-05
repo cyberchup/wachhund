@@ -1,0 +1,10 @@
+# Pinned so CI runs are reproducible. pySigma stays on 1.x because every backend
+# below requires pySigma < 2.0.
+sigma-cli==3.1.0
+pySigma==1.5.1
+pySigma-backend-elasticsearch==2.1.1
+pySigma-backend-kusto==1.0.1
+pySigma-validators-sigmahq==0.21.0
+PyYAML==6.0.3
+yamllint==1.38.0
+pytest==9.1.1

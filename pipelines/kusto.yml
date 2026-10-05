@@ -1,0 +1,18 @@
+# Custom Kusto field mappings. Runs before the built-in pipelines (priority 5 vs
+# microsoft_xdr's and azure_monitor's 10), so a mapping here overrides the built-in one.
+#
+# Add a mapping when tests/convert_rules.py reports a field the target table doesn't
+# have. Map to a column of the table the rule converts to (the error lists them).
+# Example:
+#
+#     - id: kusto_custom_process_creation
+#       type: field_name_mapping
+#       mapping:
+#           SomeSigmaField: ProcessCommandLine
+#       rule_conditions:
+#           - type: logsource
+#             category: process_creation
+#             product: windows
+name: custom_kusto
+priority: 5
+transformations: []

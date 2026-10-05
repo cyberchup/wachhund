@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        id: install
+        run: pip install -r requirements.txt
+
+      # Each check below runs even if an earlier one failed, so one run reports every problem.
+      - name: Unit tests for the repo tooling
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pytest -q tests/unit
+
+      - name: YAML lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: yamllint --strict .
+
+      - name: Sigma check with SigmaHQ validators
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: sigma check --fail-on-error --fail-on-issues --validation-config tests/sigma_cli_conf.yml rules*
+
+      - name: Repository rules (tests, status gate, ART references, public-repo hygiene)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: python tests/check_rules.py --online
+
+      - name: Convert to Elastic and Kusto, flag unmapped fields
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: python tests/convert_rules.py --out build
+
+      - name: Regression tests (true-positive and benign events)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: python tests/regression_tests_runner.py
+
+      - name: Upload converted queries
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: platform-queries
+          path: build/
+          if-no-files-found: ignore
