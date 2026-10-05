@@ -3,7 +3,7 @@
 This project is a public detection-as-code repo. Sigma rules are the single
 source of truth; platform queries are build artifacts.
 
-- **Repo:** github.com/[user]/wachhund (canonical)
+- **Repo:** github.com/cyberchup/wachhund (canonical)
 - **CI:** GitHub Actions
 - **Targets:** Elastic (primary, validated in hauslab) and Kusto (Defender XDR /
   Sentinel). Cortex XDR and SentinelOne are best-effort.
