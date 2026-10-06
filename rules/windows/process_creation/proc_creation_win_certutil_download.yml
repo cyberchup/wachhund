@@ -1,0 +1,47 @@
+title: Potential File Download via Certutil.EXE
+id: a7eae4a6-bf37-4e7e-b306-a3668b7e085c
+related:
+    - id: 19b08b1c-861d-4e75-a1ef-ea0c1baf202b
+      type: derived
+status: experimental
+description: |
+    Detects certutil.exe run with a flag that makes it fetch a URL (urlcache, verifyctl or URL) and an http or https address on the command line.
+    Certutil is a signed Windows binary for managing certificates, and attackers use it to download tools and payloads without bringing their own downloader.
+    The flags are matched without their leading dash, so -urlcache, /urlcache and other dash variants all match.
+license: DRL-1.1
+references:
+    - https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/certutil
+    - https://lolbas-project.github.io/lolbas/Binaries/Certutil/
+    - https://github.com/SigmaHQ/sigma/blob/34c5d66c22bbe41fe701cb6341d78ce324e6b24a/rules/windows/process_creation/proc_creation_win_certutil_download.yml
+    - https://github.com/redcanaryco/atomic-red-team/blob/f2eb9665994842c3e057c266f3e72b3df7180c2b/atomics/T1105/T1105.yaml
+author: Florian Roth (Nextron Systems), Jonhnathan Ribeiro, oscd.community, Nasreddine Bencherchali (Nextron Systems), cyberchup
+date: 2026-10-06
+tags:
+    - attack.command-and-control
+    - attack.t1105
+logsource:
+    category: process_creation
+    product: windows
+    definition: 'Requirements: Sysmon EID 1 or Security 4688 with command-line auditing'
+detection:
+    selection_img:
+        - Image|endswith: '\certutil.exe'
+        - OriginalFileName: 'CertUtil.exe'
+    selection_flags:
+        CommandLine|contains:
+            - 'urlcache '
+            - 'verifyctl '
+            - 'URL '
+    selection_http:
+        CommandLine|contains: 'http'
+    condition: all of selection_*
+falsepositives:
+    - PKI administrators using certutil -URL or -verifyctl to test certificate revocation list or trust list URLs
+    - Scripts that use certutil to fetch files on hosts without another download tool
+level: medium
+regression_tests_path: regression_data/rules/windows/process_creation/proc_creation_win_certutil_download/info.yml
+simulation:
+    - type: atomic-red-team
+      name: certutil download (urlcache)
+      technique: T1105
+      atomic_guid: dd3b61dd-7bbc-48cd-ab51-49ad1a776df0
