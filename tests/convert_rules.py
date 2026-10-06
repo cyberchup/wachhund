@@ -45,7 +45,12 @@ def pick_route(rule: SigmaRule, routes: list[dict]) -> dict | None:
 
 
 def unmapped_fields(rules: list[SigmaRule], pipeline: ProcessingPipeline, fallback: set[str], original: dict[int, str]) -> list[str]:
-    """Fields that no field-mapping step renamed, or that only a catch-all step renamed."""
+    """Fields that no field-mapping step renamed, or that only a catch-all step renamed.
+
+    Only the rule's own detection items are checked. Conditions a pipeline adds for the
+    logsource, such as ecs_windows' `winlog.channel: Security`, already use the target's
+    field names.
+    """
     mapping_ids = {
         item.identifier
         for item in pipeline.items
@@ -54,7 +59,7 @@ def unmapped_fields(rules: list[SigmaRule], pipeline: ProcessingPipeline, fallba
     found: list[str] = []
     for rule in rules:
         for item in iter_detection_items(rule):
-            if item.field is None:
+            if item.field is None or id(item) not in original:
                 continue
             applied = set(item.applied_processing_items) & mapping_ids
             if applied and not applied <= fallback:

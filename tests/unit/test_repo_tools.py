@@ -225,6 +225,34 @@ def test_best_effort_target_warns_without_failing(tmp_path):
     assert convert_rules.exit_code(convert_rules.run(root, out_dir=tmp_path / "build")) == 1
 
 
+SECURITY_LOG_DETECTION = """\
+logsource:
+    product: windows
+    service: security
+detection:
+    selection:
+        EventID: 1102
+        Provider_Name: 'Microsoft-Windows-Eventlog'
+    condition: selection
+"""
+
+
+def test_security_log_rule_converts_for_both_targets(tmp_path):
+    root = make_repo(tmp_path)
+    rule = root / RULE_PATH
+    text = rule.read_text(encoding="utf-8")
+    rule.write_text(text[: text.index("logsource:")] + SECURITY_LOG_DETECTION + text[text.index("falsepositives:") :], encoding="utf-8")
+    results = {r.target: r.problem for r in convert_rules.run(root, out_dir=tmp_path / "build")}
+    assert results == {"elastic": None, "kusto": None, "splunk": None}
+    # ecs_windows adds the channel condition itself; it isn't an unmapped rule field.
+    elastic_rule = json.loads((tmp_path / "build" / "elastic" / "proc_creation_win_hauslab_fixture_child.ndjson").read_text())
+    assert elastic_rule["query"].startswith("winlog.channel:Security AND")
+    # azure_monitor picks no table for `service: security`; pipelines/kusto.yml sets SecurityEvent.
+    kql = (tmp_path / "build" / "kusto" / "proc_creation_win_hauslab_fixture_child.kql").read_text()
+    assert kql.startswith("SecurityEvent\n")
+    assert 'EventSourceName =~ "Microsoft-Windows-Eventlog"' in kql
+
+
 def test_convert_flags_fields_the_kusto_table_lacks(tmp_path):
     root = make_repo(tmp_path, extra="        TotallyMadeUpField: 'x'\n")
     results = {r.target: r.problem for r in convert_rules.run(root, out_dir=tmp_path / "build")}
