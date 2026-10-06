@@ -1,0 +1,41 @@
+title: Suspicious Clearing of the Security Event Log
+id: 13b63a42-2d3a-45ba-8770-b5d493fc70cb
+related:
+    - id: d99b79d2-0a6f-4f46-ad8b-260b6e17f982
+      type: derived
+status: experimental
+description: |
+    Detects the Windows Security event log being cleared (event 1102, "The audit log was cleared").
+    Attackers clear it to remove evidence of their logons and actions, for example with wevtutil cl Security or Clear-EventLog.
+    Clearing other logs is recorded as event 104 in the System log instead, which this rule doesn't cover.
+license: DRL-1.1
+references:
+    - https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-10/security/threat-protection/auditing/event-1102
+    - https://github.com/SigmaHQ/sigma/blob/34c5d66c22bbe41fe701cb6341d78ce324e6b24a/rules/windows/builtin/security/win_security_audit_log_cleared.yml
+    - https://github.com/redcanaryco/atomic-red-team/blob/11ff111ace63e02825dd44ce8246800203a10ce8/atomics/T1685.005/T1685.005.yaml
+author: Florian Roth (Nextron Systems), cyberchup
+date: 2026-10-06
+tags:
+    - attack.defense-impairment
+    - attack.t1685.005
+    - car.2016-04-002
+logsource:
+    product: windows
+    service: security
+    definition: 'Requirements: Security event log collection from the host. Windows writes event 1102 every time the Security log is cleared.'
+detection:
+    selection:
+        EventID: 1102
+        Provider_Name: 'Microsoft-Windows-Eventlog'
+    condition: selection
+falsepositives:
+    - Log collection agents whose setup routine clears the local event logs
+    - Preparing a system image, where the logs are cleared before capture
+    - Administrators clearing a full Security log on hosts without log forwarding
+level: high
+regression_tests_path: regression_data/rules/windows/builtin/security/win_security_audit_log_cleared/info.yml
+simulation:
+    - type: atomic-red-team
+      name: Delete System Logs Using Clear-EventLog
+      technique: T1685.005
+      atomic_guid: b13e9306-3351-4b4b-a6e8-477358b0b498
