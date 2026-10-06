@@ -33,7 +33,8 @@ rule on each pull request and never commits the output.
 Every rule follows SigmaHQ's conventions and is paired with an Atomic Red Team test
 plus true-positive and benign sample events. [CONVENTIONS.md](CONVENTIONS.md) sets
 out what a rule must contain. [WORKFLOW.md](WORKFLOW.md) covers the path from branch
-to pull request to hauslab.
+to pull request to hauslab, and [TESTING.md](TESTING.md) is the checklist for testing
+a rule, both automatically and live in hauslab.
 
 Rules start at `status: experimental`. A rule moves to `test` only after the
 maintainer has run its atomic in hauslab and seen it fire.
