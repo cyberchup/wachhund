@@ -2,7 +2,8 @@
 
 How a detection goes from an idea to a rule that's validated in hauslab. This file
 covers the order of work. What a rule must look like is in
-[CONVENTIONS.md](CONVENTIONS.md).
+[CONVENTIONS.md](CONVENTIONS.md), and the step-by-step testing checklist is in
+[TESTING.md](TESTING.md).
 
 ```mermaid
 flowchart TD
@@ -71,7 +72,8 @@ python tests/convert_rules.py <path to the rule>
 ```
 
 If conversion flags an unmapped field, add a mapping in `pipelines/`. Never rename
-the field in the rule.
+the field in the rule. The full list of checks before a pull request is in
+[TESTING.md, part 1](TESTING.md#part-1-automated-checks).
 
 ## 6. Open a pull request
 
@@ -103,22 +105,17 @@ Menu names change between product versions; the steps stay the same.
 
 ## 8. Validate in hauslab
 
-Only the maintainer does this step and decides whether a rule fired.
+Only the maintainer does this step and decides whether a rule fired. Follow
+[TESTING.md, part 2](TESTING.md#part-2-live-validation-in-hauslab):
 
-1. On a hauslab test host, run the atomic from the rule's `simulation` entry with
-   Invoke-AtomicRedTeam:
-
-   ```text
-   Invoke-AtomicTest <technique> -TestGuids <atomic_guid> -GetPrereqs
-   Invoke-AtomicTest <technique> -TestGuids <atomic_guid>
-   Invoke-AtomicTest <technique> -TestGuids <atomic_guid> -Cleanup
-   ```
-
-2. Check that the Elastic rule raised an alert.
-3. If it didn't, open the source event in Discover and compare its index and field
-   names with the rule's query. A field-name mismatch is fixed in
-   `pipelines/elastic.yml`; a gap in the logic is fixed in the rule. Either way,
-   start again from step 2 on a new branch.
+1. Before running anything, check that hauslab collects the events the rule needs,
+   and read what the atomic does.
+2. Run the atomic from the rule's `simulation` entry with Invoke-AtomicRedTeam,
+   then clean up.
+3. Check that the Elastic rule raised an alert.
+4. If it didn't, work through the troubleshooting list in TESTING.md. A field-name
+   mismatch is fixed in `pipelines/elastic.yml`; a gap in the logic is fixed in the
+   rule. Either way, start again from step 2 on a new branch.
 
 ## 9. Record the validation
 
