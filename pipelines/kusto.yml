@@ -36,3 +36,23 @@ transformations:
           - type: logsource
             product: windows
             service: security
+    # Windows System log rules query Sentinel's Event table, where Azure Monitor Agent
+    # stores Windows event logs other than Security.
+    - id: kusto_custom_system_table
+      type: set_state
+      key: query_table
+      val: Event
+      rule_conditions:
+          - type: logsource
+            product: windows
+            service: system
+    # The Event table keeps the event's provider in Source. Event data fields, including
+    # the name of a cleared log in event 104, are only inside the EventData XML.
+    - id: kusto_custom_system_fields
+      type: field_name_mapping
+      mapping:
+          Provider_Name: Source
+      rule_conditions:
+          - type: logsource
+            product: windows
+            service: system

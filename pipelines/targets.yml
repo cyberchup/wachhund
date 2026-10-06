@@ -39,6 +39,9 @@ kusto:
         # Windows Security event log: Sentinel's SecurityEvent table.
         - when: {product: windows, service: security}
           pipelines: [pipelines/kusto.yml, azure_monitor]
+        # Windows System event log: Sentinel's Event table.
+        - when: {product: windows, service: system}
+          pipelines: [pipelines/kusto.yml, azure_monitor]
         # Everything else: Defender XDR advanced hunting tables (also queryable in Sentinel
         # through the Defender XDR connector). Unsupported logsources fail conversion.
         - pipelines: [pipelines/kusto.yml, microsoft_xdr]

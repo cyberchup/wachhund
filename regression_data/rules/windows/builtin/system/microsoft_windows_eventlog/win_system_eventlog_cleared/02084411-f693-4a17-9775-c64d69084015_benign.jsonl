@@ -1,0 +1,5 @@
+{"EventID": 1102, "Provider_Name": "Microsoft-Windows-Eventlog", "Channel": "Security", "Computer": "ws01.hauslab.local", "SubjectUserName": "labadmin", "SubjectDomainName": "HAUSLAB"}
+{"EventID": 6005, "Provider_Name": "EventLog", "Channel": "System", "Computer": "ws01.hauslab.local"}
+{"EventID": 6006, "Provider_Name": "EventLog", "Channel": "System", "Computer": "ws01.hauslab.local"}
+{"EventID": 104, "Provider_Name": "Hauslab-Test-Provider", "Channel": "System", "Computer": "ws01.hauslab.local"}
+{"EventID": 7036, "Provider_Name": "Service Control Manager", "Channel": "System", "Computer": "ws01.hauslab.local", "param1": "Windows Event Log", "param2": "stopped"}

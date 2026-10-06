@@ -1,0 +1,2 @@
+{"EventID": 104, "Provider_Name": "Microsoft-Windows-Eventlog", "Channel": "System", "Computer": "ws01.hauslab.local", "SubjectUserName": "labadmin", "SubjectDomainName": "HAUSLAB"}
+{"EventID": 104, "Provider_Name": "Microsoft-Windows-Eventlog", "Channel": "System", "Computer": "dc01.hauslab.local", "SubjectUserName": "labadmin", "SubjectDomainName": "HAUSLAB"}
