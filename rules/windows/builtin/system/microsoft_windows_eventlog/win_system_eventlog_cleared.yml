@@ -1,0 +1,44 @@
+title: Potential Clearing of a Windows Event Log
+id: 02084411-f693-4a17-9775-c64d69084015
+related:
+    - id: a62b37e0-45d3-48d9-a517-90c1a1b0186b
+      type: derived
+    - id: 100ef69e-3327-481c-8e5c-6d80d9507556
+      type: derived
+status: experimental
+description: |
+    Detects a Windows event log being cleared, which Windows records as event 104 in the System log ("The <name> log file was cleared").
+    Attackers clear logs such as System, Sysmon or PowerShell to remove evidence, for example with wevtutil cl or Clear-EventLog.
+    It covers every log except Security, whose clearing is event 1102 and has its own rule.
+    The rule doesn't tell important logs apart from others: the cleared log's name is only in the event data, which Elastic and Kusto don't expose under the same field.
+license: DRL-1.1
+references:
+    - https://github.com/SigmaHQ/sigma/blob/34c5d66c22bbe41fe701cb6341d78ce324e6b24a/rules/windows/builtin/system/microsoft_windows_eventlog/win_system_eventlog_cleared.yml
+    - https://github.com/SigmaHQ/sigma/blob/34c5d66c22bbe41fe701cb6341d78ce324e6b24a/rules/windows/builtin/system/microsoft_windows_eventlog/win_system_susp_eventlog_cleared.yml
+    - https://github.com/redcanaryco/atomic-red-team/blob/11ff111ace63e02825dd44ce8246800203a10ce8/atomics/T1685.005/T1685.005.yaml
+author: Florian Roth (Nextron Systems), Tim Shelton, Nasreddine Bencherchali (Nextron Systems), cyberchup
+date: 2026-10-06
+tags:
+    - attack.defense-impairment
+    - attack.t1685.005
+    - car.2016-04-002
+logsource:
+    product: windows
+    service: system
+    definition: 'Requirements: System event log collection from the host'
+detection:
+    selection:
+        EventID: 104
+        Provider_Name: 'Microsoft-Windows-Eventlog'
+    condition: selection
+falsepositives:
+    - Log collection agents whose setup routine clears the local event logs
+    - Preparing a system image, where the logs are cleared before capture
+    - Software or administrators clearing an application's own log
+level: medium
+regression_tests_path: regression_data/rules/windows/builtin/system/microsoft_windows_eventlog/win_system_eventlog_cleared/info.yml
+simulation:
+    - type: atomic-red-team
+      name: Clear Logs
+      technique: T1685.005
+      atomic_guid: e6abb60e-26b8-41da-8aae-0c35174b0967

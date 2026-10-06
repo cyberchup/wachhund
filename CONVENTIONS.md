@@ -507,9 +507,12 @@ Conversion picks each target's backend and pipelines by logsource, as set in
   ECS) and macOS rules through `ecs_macos_esf`. Every other product needs its
   mappings in `pipelines/elastic.yml`.
 - **Kusto:** Defender XDR advanced hunting tables through `microsoft_xdr`.
-  Windows Security log rules go to Sentinel's `SecurityEvent` table through
-  `azure_monitor`. `azure_monitor` doesn't pick a table for `service: security`,
-  so `pipelines/kusto.yml` sets it. Sentinel ASIM isn't used: in
+  Windows Security log rules go to Sentinel's `SecurityEvent` table and System
+  log rules to its `Event` table, both through `azure_monitor`. `azure_monitor`
+  doesn't pick a table for `service: security` or `service: system`, so
+  `pipelines/kusto.yml` sets it. In the `Event` table, event data fields are only
+  inside the `EventData` XML, so a System log rule can only match columns such as
+  `EventID` and `Source`. Sentinel ASIM isn't used: in
   pySigma-backend-kusto 1.0.1 its pipeline fails on `OriginalFileName`.
 - **Splunk (best-effort):** plain SPL through `splunk_windows`, which keeps
   Sigma's field names (the Windows event field names). The queries aren't scoped
