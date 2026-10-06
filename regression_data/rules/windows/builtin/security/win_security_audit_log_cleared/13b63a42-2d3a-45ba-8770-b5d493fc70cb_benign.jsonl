@@ -1,0 +1,5 @@
+{"EventID": 104, "Provider_Name": "Microsoft-Windows-Eventlog", "Channel": "System", "Computer": "ws01.hauslab.local", "SubjectUserName": "labadmin", "SubjectDomainName": "HAUSLAB"}
+{"EventID": 1100, "Provider_Name": "Microsoft-Windows-Eventlog", "Channel": "Security", "Computer": "ws01.hauslab.local"}
+{"EventID": 1104, "Provider_Name": "Microsoft-Windows-Eventlog", "Channel": "Security", "Computer": "ws01.hauslab.local"}
+{"EventID": 1105, "Provider_Name": "Microsoft-Windows-Eventlog", "Channel": "Security", "Computer": "ws01.hauslab.local"}
+{"EventID": 4719, "Provider_Name": "Microsoft-Windows-Security-Auditing", "Channel": "Security", "Computer": "ws01.hauslab.local", "SubjectUserSid": "S-1-5-21-1111111111-2222222222-3333333333-1104", "SubjectUserName": "labadmin", "SubjectDomainName": "HAUSLAB", "SubjectLogonId": "0x1a2b3c"}
