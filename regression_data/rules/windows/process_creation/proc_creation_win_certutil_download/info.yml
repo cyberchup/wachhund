@@ -1,0 +1,18 @@
+id: ed06b784-b440-48d1-a4ac-81a96c33e891
+description: |
+    Positive samples: the T1105 urlcache atomic as cmd.exe launches it, a download from an IP address, verifyctl, slash and en-dash flags, and a renamed copy of certutil.
+    Benign samples: clearing the URL cache, a revocation check with -urlfetch, -hashfile and -decode, curl.exe downloading, and the atomic's cmd.exe parent.
+date: 2026-10-06
+author: cyberchup
+rule_metadata:
+    - id: a7eae4a6-bf37-4e7e-b306-a3668b7e085c
+      title: Potential File Download via Certutil.EXE
+regression_tests_info:
+    - name: Positive Detection Test
+      type: jsonl
+      match_count: 6
+      path: regression_data/rules/windows/process_creation/proc_creation_win_certutil_download/a7eae4a6-bf37-4e7e-b306-a3668b7e085c.jsonl
+    - name: Benign Look-alike Test
+      type: jsonl
+      match_count: 0
+      path: regression_data/rules/windows/process_creation/proc_creation_win_certutil_download/a7eae4a6-bf37-4e7e-b306-a3668b7e085c_benign.jsonl
