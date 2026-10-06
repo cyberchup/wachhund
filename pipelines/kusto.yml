@@ -15,4 +15,24 @@
 #             product: windows
 name: custom_kusto
 priority: 5
-transformations: []
+transformations:
+    # Windows Security log rules query Sentinel's SecurityEvent table. azure_monitor only
+    # picks a table from a rule's category (process_creation, ...), so a rule with
+    # `service: security` needs the table set here.
+    - id: kusto_custom_security_table
+      type: set_state
+      key: query_table
+      val: SecurityEvent
+      rule_conditions:
+          - type: logsource
+            product: windows
+            service: security
+    # SecurityEvent keeps the event's provider in EventSourceName.
+    - id: kusto_custom_security_fields
+      type: field_name_mapping
+      mapping:
+          Provider_Name: EventSourceName
+      rule_conditions:
+          - type: logsource
+            product: windows
+            service: security

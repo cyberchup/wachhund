@@ -508,8 +508,9 @@ Conversion picks each target's backend and pipelines by logsource, as set in
   mappings in `pipelines/elastic.yml`.
 - **Kusto:** Defender XDR advanced hunting tables through `microsoft_xdr`.
   Windows Security log rules go to Sentinel's `SecurityEvent` table through
-  `azure_monitor`. Sentinel ASIM isn't used: in pySigma-backend-kusto 1.0.1 its
-  pipeline fails on `OriginalFileName`.
+  `azure_monitor`. `azure_monitor` doesn't pick a table for `service: security`,
+  so `pipelines/kusto.yml` sets it. Sentinel ASIM isn't used: in
+  pySigma-backend-kusto 1.0.1 its pipeline fails on `OriginalFileName`.
 - **Splunk (best-effort):** plain SPL through `splunk_windows`, which keeps
   Sigma's field names (the Windows event field names). The queries aren't scoped
   to an index; add yours when deploying. Problems are reported in the CI summary
