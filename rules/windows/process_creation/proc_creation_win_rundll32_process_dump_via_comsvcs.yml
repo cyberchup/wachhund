@@ -1,0 +1,61 @@
+title: Suspicious Process Memory Dump via Comsvcs.DLL
+id: 39b747f3-d24b-4685-83f7-6a830a8a69e9
+related:
+    - id: 646ea171-dded-4578-8a4d-65e9822892e3
+      type: derived
+status: experimental
+description: |
+    Detects rundll32 calling the MiniDump export of comsvcs.dll to write a full memory dump of a process, usually lsass.exe to extract credentials.
+    Covers the export called by name and by ordinal (#24), including padded and wrapped ordinals such as #+0000024, #-4294967272 and #65560 that attackers use to avoid simple matches.
+license: DRL-1.1
+references:
+    - https://modexp.wordpress.com/2019/08/30/minidumpwritedump-via-com-services-dll/
+    - https://lolbas-project.github.io/lolbas/Libraries/comsvcs/
+    - https://github.com/SigmaHQ/sigma/blob/4e2e0a8acc9f53553c01f0dda2a8023fd90845fb/rules/windows/process_creation/proc_creation_win_rundll32_process_dump_via_comsvcs.yml
+    - https://github.com/redcanaryco/atomic-red-team/blob/fb38ab9b3839d3f896ea0884b5b0186ab6d57b6b/atomics/T1003.001/T1003.001.yaml
+author: Florian Roth (Nextron Systems), Modexp, Nasreddine Bencherchali (Nextron Systems), Swachchhanda Shrawan Poudel (Nextron Systems), cyberchup
+date: 2026-10-07
+tags:
+    - attack.credential-access
+    - attack.t1003.001
+logsource:
+    category: process_creation
+    product: windows
+    definition: 'Requirements: Sysmon EID 1 or Security 4688 with command-line auditing'
+detection:
+    selection_img:
+        - Image|endswith: '\rundll32.exe'
+        - OriginalFileName: 'RUNDLL32.EXE'
+        - CommandLine|contains: 'rundll32'
+    selection_cli_export:
+        CommandLine|contains|all:
+            - 'comsvcs'
+            - 'full'
+        CommandLine|contains:
+            - '#-'
+            - '#+'
+            - '#24'
+            - '24 '
+            - 'MiniDump'  # also matches MiniDumpW
+            - '#65560'  # 16-bit ordinals wrap: 65536 + 24
+    selection_generic:
+        # Ordinal 24 with any launcher, for renamed copies of rundll32
+        CommandLine|contains|all:
+            - '24'
+            - 'comsvcs'
+            - 'full'
+        CommandLine|contains:
+            - ' #'
+            - ',#'
+            - ', #'
+            - '"#'
+    condition: (selection_img and selection_cli_export) or selection_generic
+falsepositives:
+    - Unlikely
+level: high
+regression_tests_path: regression_data/rules/windows/process_creation/proc_creation_win_rundll32_process_dump_via_comsvcs/info.yml
+simulation:
+    - type: atomic-red-team
+      name: Dump LSASS.exe Memory using comsvcs.dll
+      technique: T1003.001
+      atomic_guid: 2536dee2-12fb-459a-8c37-971844fa73be

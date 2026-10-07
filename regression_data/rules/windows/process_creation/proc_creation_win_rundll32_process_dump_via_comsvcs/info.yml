@@ -1,0 +1,18 @@
+id: 131a41aa-9e0c-4d23-b62e-c54263cffc7e
+description: |
+    Positive samples: the T1003.001 comsvcs atomic's rundll32 child and PowerShell parent, the ordinal forms #24, #+0000024, #-4294967272 and #65560, and a renamed rundll32 using the ordinal.
+    Benign samples: rundll32 and regsvr32 loading comsvcs.dll without dumping, common rundll32 uses, procdump dumping lsass, and PowerShell reading comsvcs.dll's properties.
+date: 2026-10-07
+author: cyberchup
+rule_metadata:
+    - id: 39b747f3-d24b-4685-83f7-6a830a8a69e9
+      title: Suspicious Process Memory Dump via Comsvcs.DLL
+regression_tests_info:
+    - name: Positive Detection Test
+      type: jsonl
+      match_count: 7
+      path: regression_data/rules/windows/process_creation/proc_creation_win_rundll32_process_dump_via_comsvcs/39b747f3-d24b-4685-83f7-6a830a8a69e9.jsonl
+    - name: Benign Look-alike Test
+      type: jsonl
+      match_count: 0
+      path: regression_data/rules/windows/process_creation/proc_creation_win_rundll32_process_dump_via_comsvcs/39b747f3-d24b-4685-83f7-6a830a8a69e9_benign.jsonl
