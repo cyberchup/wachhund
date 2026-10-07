@@ -1,0 +1,85 @@
+title: Suspicious Shadow Copy or Backup Catalog Deletion via Windows Utilities
+id: e00788ca-1ff4-4b9a-a014-cea26ba93b5e
+related:
+    - id: c947b146-0abc-4c87-9c64-b17e9d7274a2
+      type: derived
+status: experimental
+description: |
+    Detects built-in Windows utilities destroying local recovery points: vssadmin, wmic, diskshadow or PowerShell deleting volume shadow copies, wbadmin deleting the backup catalog, or vssadmin resizing the shadow storage, which makes Windows drop existing shadow copies.
+    Ransomware does this before encrypting, so that files can't be restored from shadow copies or Windows Backup.
+license: DRL-1.1
+references:
+    - https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/vssadmin-delete-shadows
+    - https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/vssadmin-resize-shadowstorage
+    - https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/wbadmin-delete-catalog
+    - https://github.com/SigmaHQ/sigma/blob/34c5d66c22bbe41fe701cb6341d78ce324e6b24a/rules/windows/process_creation/proc_creation_win_susp_shadow_copies_deletion.yml
+    - https://github.com/redcanaryco/atomic-red-team/blob/11ff111ace63e02825dd44ce8246800203a10ce8/atomics/T1490/T1490.yaml
+author: Florian Roth (Nextron Systems), Michael Haag, Teymur Kheirkhabarov, Daniil Yugoslavskiy, oscd.community, Andreas Hunkeler (@Karneades), cyberchup
+date: 2026-10-06
+tags:
+    - attack.impact
+    - attack.t1490
+logsource:
+    category: process_creation
+    product: windows
+    definition: 'Requirements: Sysmon EID 1 or Security 4688 with command-line auditing'
+detection:
+    selection_delete_img:
+        - Image|endswith:
+              - '\powershell.exe'
+              - '\pwsh.exe'
+              - '\wmic.exe'
+              - '\vssadmin.exe'
+              - '\diskshadow.exe'
+        - OriginalFileName:
+              - 'PowerShell.EXE'
+              - 'pwsh.dll'
+              - 'wmic.exe'
+              - 'VSSADMIN.EXE'
+              - 'diskshadow.exe'
+    selection_delete_cli:
+        CommandLine|contains|all:
+            - 'shadow'  # delete shadows, shadowcopy delete, delete shadowstorage
+            - 'delete'
+    selection_wbadmin_img:
+        - Image|endswith: '\wbadmin.exe'
+        - OriginalFileName: 'WBADMIN.EXE'
+    selection_wbadmin_cli:
+        CommandLine|contains|all:
+            - 'delete'
+            - 'catalog'
+            - 'quiet'  # -quiet or /quiet
+    selection_resize_img:
+        - Image|endswith: '\vssadmin.exe'
+        - OriginalFileName: 'VSSADMIN.EXE'
+    selection_resize_cli:
+        CommandLine|contains|all:
+            - 'resize'
+            - 'shadowstorage'
+        CommandLine|contains:
+            - 'unbounded'
+            - '/MaxSize='
+    condition: all of selection_delete_* or all of selection_wbadmin_* or all of selection_resize_*
+falsepositives:
+    - Administrators or backup software deleting old shadow copies or backup catalogs
+    - Administrators changing the shadow storage size with vssadmin resize shadowstorage
+    - Endpoint management agents running PowerShell commands that contain both words, such as Ivanti LANDesk
+level: high
+regression_tests_path: regression_data/rules/windows/process_creation/proc_creation_win_susp_shadow_copies_deletion/info.yml
+simulation:
+    - type: atomic-red-team
+      name: Windows - Delete Volume Shadow Copies
+      technique: T1490
+      atomic_guid: 43819286-91a9-4369-90ed-d31fb4da2c01
+    - type: atomic-red-team
+      name: Windows - Delete Volume Shadow Copies via WMI
+      technique: T1490
+      atomic_guid: 6a3ff8dd-f49c-4272-a658-11c2fe58bd88
+    - type: atomic-red-team
+      name: Windows - wbadmin Delete Windows Backup Catalog
+      technique: T1490
+      atomic_guid: 263ba6cb-ea2b-41c9-9d4e-b652dadd002c
+    - type: atomic-red-team
+      name: Windows - vssadmin Resize Shadowstorage Volume
+      technique: T1490
+      atomic_guid: da558b07-69ae-41b9-b9d4-4d98154a7049
