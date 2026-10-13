@@ -116,6 +116,28 @@ def test_clean_fixture_passes_everything(tmp_path):
     )
 
 
+def test_converted_rules_keep_drl_attribution(tmp_path):
+    # Elastic rules carry the author as a field; bare Kusto and Splunk queries carry it as comments.
+    root = make_repo(tmp_path)
+    convert_rules.run(root, out_dir=tmp_path / "build")
+    attribution = [
+        "title: Suspicious Child Process Of Hauslab Fixture Binary",
+        f"id: {RULE_ID}",
+        "author: hauslab",
+        "license: DRL-1.1 (https://github.com/SigmaHQ/Detection-Rule-License)",
+        f"rule: https://github.com/cyberchup/wachhund/blob/main/{RULE_PATH}",
+    ]
+    build = tmp_path / "build"
+    kql = (build / "kusto" / "proc_creation_win_hauslab_fixture_child.kql").read_text().splitlines()
+    assert kql[:5] == [f"// {line}" for line in attribution]
+    assert kql[5].startswith("DeviceProcessEvents")
+    spl = (build / "splunk" / "proc_creation_win_hauslab_fixture_child.spl").read_text().splitlines()
+    assert spl[0].startswith('ParentImage="*\\\\hauslab_fixture.exe"')
+    assert spl[1:] == [f"```{line}```" for line in attribution]
+    elastic_rule = json.loads((build / "elastic" / "proc_creation_win_hauslab_fixture_child.ndjson").read_text())
+    assert elastic_rule["author"] == ["hauslab"]
+
+
 def test_benign_event_that_matches_fails_the_run(tmp_path):
     root = make_repo(tmp_path)
     write_events(root / DATA_DIR / f"{RULE_ID}_benign.jsonl", BENIGN, TRUE_POSITIVE)
@@ -254,7 +276,8 @@ def test_security_log_rule_converts_for_both_targets(tmp_path):
     assert elastic_rule["query"].startswith('any where winlog.channel:"Security" and')
     # azure_monitor picks no table for `service: security`; pipelines/kusto.yml sets SecurityEvent.
     kql = (tmp_path / "build" / "kusto" / "proc_creation_win_hauslab_fixture_child.kql").read_text()
-    assert kql.startswith("SecurityEvent\n")
+    query = [line for line in kql.splitlines() if not line.startswith("//")]
+    assert query[0] == "SecurityEvent"
     assert 'EventSourceName =~ "Microsoft-Windows-Eventlog"' in kql
 
 

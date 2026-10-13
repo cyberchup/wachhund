@@ -480,9 +480,13 @@ requires attribution. When you adapt one:
 - Keep the upstream `author` value and add yours after a comma.
 - Add a permalink to the upstream rule file to `references`.
 - Add `license: DRL-1.1` (its SPDX ID) after `description`.
-- DRL 1.1 also requires that alerts produced by the rule keep the author
-  attribution, so the build must carry `author` into the converted platform
-  rule.
+- DRL 1.1 also requires that shared copies of the rule keep its authors, a
+  link to it and its license, and that alerts produced by the rule credit its
+  authors. The build carries these into every converted rule. Elastic rules
+  have `author` and `license` fields. `.kql` files start, and `.spl` files end,
+  with comment lines giving the rule's title, id, authors, license and URL
+  (`tests/convert_rules.py`, configured in `pipelines/targets.yml`). Keep those
+  lines when you deploy a query.
 
 ## 9. Tests and CI
 
@@ -521,8 +525,10 @@ Conversion picks each target's backend and pipelines by logsource, as set in
   to an index; add yours when deploying. Problems are reported in the CI summary
   but don't fail CI.
 - Converted queries are uploaded as the `platform-queries` artifact:
-  `elastic/*.ndjson` (importable in Kibana), `kusto/*.kql` and `splunk/*.spl`.
-  They're build output and are never committed.
+  `elastic/*.ndjson` (importable in Kibana), `kusto/*.kql` and `splunk/*.spl`,
+  with the attribution from [section 8](#8-rules-derived-from-sigmahq). Splunk's
+  comments go after the query because Splunk rejects a comment in front of a
+  generating command. They're build output and are never committed.
 
 When conversion flags a field, add a mapping to `pipelines/elastic.yml` or
 `pipelines/kusto.yml` that points at a field hauslab's data really has. Don't

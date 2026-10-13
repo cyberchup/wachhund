@@ -103,6 +103,13 @@ run under **Actions** and download the `platform-queries` artifact), or run
 
 Menu names change between product versions; the steps stay the same.
 
+The `.kql` and `.spl` files carry comment lines with the rule's title, id, authors,
+license and URL, which the Detection Rule License requires
+([CONVENTIONS.md, section 8](CONVENTIONS.md#8-rules-derived-from-sigmahq)). Paste
+them with the query. Sentinel, Defender XDR and Splunk alerts show the rule's
+name and description, not these comments, so also copy the `author` line into the
+rule's description. Elastic rules already carry the authors.
+
 ## 8. Validate in hauslab
 
 Only the maintainer does this step and decides whether a rule fired. Follow

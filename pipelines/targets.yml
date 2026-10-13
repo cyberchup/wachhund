@@ -14,6 +14,8 @@ elastic:
     # does. Lucene compares keyword and wildcard fields such as process.command_line
     # case-sensitively, so it missed `CERTUTIL -URLCACHE` and similar.
     backend: eql
+    # Elastic Security rules carry the Sigma rule's author and license as rule fields,
+    # so they need no attribution comments.
     format: siem_rule_ndjson
     extension: ndjson
     required: true
@@ -35,6 +37,10 @@ kusto:
     format: default
     extension: kql
     required: true
+    # A bare query has no rule metadata, so the file starts with comment lines giving the
+    # rule's title, id, authors, license and URL, as DRL 1.1 requires
+    # (CONVENTIONS.md, section 8).
+    attribution_comment: '// {}'
     # The built-in Kusto pipelines reject fields that aren't valid for the target table,
     # so no extra mapping check is needed here.
     require_mapped_fields: false
@@ -54,6 +60,11 @@ splunk:
     format: default
     extension: spl
     required: false
+    # The same attribution as Kusto, but at the end of the query: Splunk rejects a comment
+    # in front of a generating command, and its docs don't say whether a query's implicit
+    # `search` counts as one.
+    attribution_comment: '```{}```'
+    attribution_at: end
     # splunk_windows keeps Sigma's field names (the Windows event field names, such as
     # Image and CommandLine), so there's no mapping step to check. Whether Splunk has
     # those fields depends on how it indexes the events.
