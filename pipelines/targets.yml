@@ -25,6 +25,10 @@ elastic:
     require_mapped_fields: true
     fallback_items:
         - ecs_windows_winlog_eventdata_prefix
+    # Value forms the backend converts without an error into a query with a different
+    # meaning (CONVENTIONS.md, section 9). EQL runs a regex as a Lucene regexp: anchored
+    # to the whole value, with no `\d` or `(?i)`, and with `~ & < > @ #` as operators.
+    unfaithful_values: [regex]
     routes:
         - when: {product: windows}
           pipelines: [pipelines/elastic.yml, ecs_windows]
@@ -44,6 +48,10 @@ kusto:
     # The built-in Kusto pipelines reject fields that aren't valid for the target table,
     # so no extra mapping check is needed here.
     require_mapped_fields: false
+    # A `?`, or a `*` inside a value, becomes a case-sensitive `matches regex` that also
+    # matches anywhere in the field, or, in a `contains|all` list, separate `contains`
+    # checks in any order (CONVENTIONS.md, section 9).
+    unfaithful_values: [inner_wildcard]
     routes:
         # Windows Security event log: Sentinel's SecurityEvent table.
         - when: {product: windows, service: security}

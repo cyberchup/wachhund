@@ -287,6 +287,11 @@ See [Tags](#5-tags).
   they cover common third-party software.
 - **Repo rule:** no environment-specific exclusions (see
   [Public-repo hygiene](#7-public-repo-hygiene)).
+- **Repo rule:** write values as plain strings, either exact or with
+  `contains`, `startswith` or `endswith`. Regex (`|re`) and wildcards inside a
+  value convert with a different meaning on one of the primary targets, and CI
+  fails them ([section 9](#9-tests-and-ci)). If the logic can't be written
+  without them, raise it with the maintainer.
 
 ### falsepositives
 
@@ -500,7 +505,7 @@ problem:
 | `yamllint --strict .` | YAML formatting breaks section 3, including CRLF line endings |
 | `sigma check ... rules*` | any pySigma or SigmaHQ validator reports an issue (all validators are on, a superset of SigmaHQ's set) |
 | `python tests/check_rules.py --online` | a rule breaks a **Repo rule** in this file |
-| `python tests/convert_rules.py` | a rule doesn't convert for Elastic or Kusto, or uses a field no pipeline maps (Splunk problems are reported but don't fail CI) |
+| `python tests/convert_rules.py` | a rule doesn't convert for Elastic or Kusto, uses a field no pipeline maps, or uses a value that one of them would match differently (Splunk problems are reported but don't fail CI) |
 | `python tests/regression_tests_runner.py` | a true-positive sample doesn't match, or a benign one does |
 
 Conversion picks each target's backend and pipelines by logsource, as set in
@@ -533,6 +538,21 @@ Conversion picks each target's backend and pipelines by logsource, as set in
 When conversion flags a field, add a mapping to `pipelines/elastic.yml` or
 `pipelines/kusto.yml` that points at a field hauslab's data really has. Don't
 rename the field in the rule; rules keep Sigma field names.
+
+Some values convert without an error into a query that matches something else.
+`convert_rules.py` fails these for the targets that list them under
+`unfaithful_values` in `pipelines/targets.yml`. They were checked against the
+pinned backends:
+
+| Value | Target | What the query does instead |
+| --- | --- | --- |
+| Regex (`\|re`) | Elastic | EQL runs it as a Lucene regexp. It must match the whole value, has no `\d`, `\w` or `(?i)`, and treats `~ & < > @ #` as operators |
+| A `?` anywhere, or a `*` inside the value | Kusto | It becomes `matches regex`, which is case-sensitive and matches anywhere in the field, so an exact value loses its start and end. In a `contains\|all` list it becomes separate `contains` checks, in any order |
+
+Wildcards inside a value are fine on Elastic (EQL's `:` handles `*` and `?`), and
+regex is fine on Kusto. A rule needs both targets, though, so neither form is
+usable. The check covers only these forms, so still read the converted queries
+([TESTING.md, part 1](TESTING.md#part-1-automated-checks)).
 
 Defaults to confirm against hauslab:
 

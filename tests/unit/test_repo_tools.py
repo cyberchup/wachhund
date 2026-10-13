@@ -286,3 +286,33 @@ def test_convert_flags_fields_the_kusto_table_lacks(tmp_path):
     results = {r.target: r.problem for r in convert_rules.run(root, out_dir=tmp_path / "build")}
     assert results["kusto"] == "unmapped field: TotallyMadeUpField is not a column of DeviceProcessEvents"
     assert results["elastic"] == "unmapped field(s): TotallyMadeUpField (became winlog.event_data.TotallyMadeUpField)"
+
+
+@pytest.mark.parametrize(
+    "extra, target, expected",
+    [
+        # EQL runs regex as an anchored Lucene regexp.
+        ("        CommandLine|re: 'a.*b'\n", "elastic", "CommandLine 'a.*b' (regex)"),
+        # Kusto turns these into a case-sensitive regex, or separate contains checks.
+        ("        CommandLine|contains: '/user:* *'\n", "kusto", "CommandLine '*/user:* *' (inner wildcard)"),
+        ("        CommandLine|startswith: 'ab?'\n", "kusto", "CommandLine 'ab?*' (inner wildcard)"),
+    ],
+)
+def test_convert_flags_values_a_target_would_match_differently(tmp_path, extra, target, expected):
+    root = make_repo(tmp_path, extra=extra)
+    results = {r.target: r.problem for r in convert_rules.run(root, out_dir=tmp_path / "build")}
+    assert results == {**dict.fromkeys(results), target: f"query would match differently from the rule: {expected}"}
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        "        CommandLine|windash|contains: '-quiet'\n",
+        # The trailing * is redundant; Kusto still converts it to a plain `contains`.
+        "        CommandLine|contains: 'abc*'\n",
+    ],
+)
+def test_convert_accepts_wildcards_at_the_ends_of_a_value(tmp_path, extra):
+    root = make_repo(tmp_path, extra=extra)
+    results = {r.target: r.problem for r in convert_rules.run(root, out_dir=tmp_path / "build")}
+    assert results == {"elastic": None, "kusto": None, "splunk": None}
