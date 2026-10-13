@@ -26,6 +26,11 @@ from repo import ROOT, iter_detection_items, iter_rule_files, load_yaml, rel, re
 # Raised by the Kusto pipelines when a field isn't a column of the target table.
 INVALID_FIELD = re.compile(r"Invalid SigmaDetectionItem field name encountered: (.+?)\. Please use valid fields for the (\S+) table")
 
+# Attribution for targets whose output is a bare query (CONVENTIONS.md, section 8).
+REPO_URL = "https://github.com/cyberchup/wachhund"
+REPO_LICENSE = "DRL-1.1"
+DRL_URL = "https://github.com/SigmaHQ/Detection-Rule-License"
+
 
 @dataclass
 class Result:
@@ -71,6 +76,18 @@ def unmapped_fields(rules: list[SigmaRule], pipeline: ProcessingPipeline, fallba
     return found
 
 
+def attribution(rule: SigmaRule, rule_path: str) -> list[str]:
+    """What DRL 1.1 asks a shared rule to keep: its authors, a link to it, and its license."""
+    rule_license = rule.license or REPO_LICENSE
+    return [
+        f"title: {rule.title}",
+        f"id: {rule.id}",
+        f"author: {rule.author}",
+        f"license: {rule_license} ({DRL_URL})" if rule_license == "DRL-1.1" else f"license: {rule_license}",
+        f"rule: {REPO_URL}/blob/main/{rule_path}",
+    ]
+
+
 def convert(rule_path: Path, target: str, config: dict, out_dir: Path, root: Path = ROOT) -> Result:
     result = Result(rel(rule_path, root), target, required=bool(config.get("required", True)))
     try:
@@ -107,6 +124,9 @@ def convert(rule_path: Path, target: str, config: dict, out_dir: Path, root: Pat
     target_dir.mkdir(parents=True, exist_ok=True)
     out_file = target_dir / f"{rule_path.stem}.{config.get('extension', 'txt')}"
     lines = [json.dumps(query) if isinstance(query, (dict, list)) else str(query) for query in output]
+    if config.get("attribution_comment"):
+        notes = [config["attribution_comment"].format(line) for line in attribution(rules[0], result.rule)]
+        lines = lines + notes if config.get("attribution_at") == "end" else notes + lines
     out_file.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     result.output = rel(out_file, root)
     return result
