@@ -360,9 +360,9 @@ validated:                    # repo extension, see section 6; only after the ma
   `pipelines: [pipelines/elastic.yml, ecs_windows]`.
 - Sample values follow [Public-repo hygiene](#7-public-repo-hygiene).
 - Tests match the way the Sigma spec defines (strings are case-insensitive), not
-  the way each platform does. Elastic compares some fields case-sensitively (for
-  example `process.command_line`), so passing tests doesn't prove the Elastic
-  query fires. Confirming that is what hauslab validation is for.
+  the way each platform does. Passing tests doesn't prove a converted query fires,
+  for example if hauslab's data lacks a field the query uses. Confirming that is
+  what hauslab validation is for.
 
 ### simulation
 
@@ -502,10 +502,12 @@ problem:
 Conversion picks each target's backend and pipelines by logsource, as set in
 `pipelines/targets.yml`:
 
-- **Elastic:** Lucene queries packaged as Elastic Security rules
-  (`siem_rule_ndjson`). Windows rules go through `ecs_windows` (Winlogbeat-style
-  ECS) and macOS rules through `ecs_macos_esf`. Every other product needs its
-  mappings in `pipelines/elastic.yml`.
+- **Elastic:** EQL queries packaged as Elastic Security rules
+  (`siem_rule_ndjson`). EQL's `:` and `like~` compare strings case-insensitively,
+  as Sigma does; Lucene compares fields such as `process.command_line`
+  case-sensitively. Windows rules go through `ecs_windows` (Winlogbeat-style ECS)
+  and macOS rules through `ecs_macos_esf`. Every other product needs its mappings
+  in `pipelines/elastic.yml`.
 - **Kusto:** Defender XDR advanced hunting tables through `microsoft_xdr`.
   Windows Security log rules go to Sentinel's `SecurityEvent` table and System
   log rules to its `Event` table, both through `azure_monitor`. `azure_monitor`
@@ -528,8 +530,11 @@ rename the field in the rule; rules keep Sigma field names.
 
 Defaults to confirm against hauslab:
 
-- `ecs_windows` queries `.caseless` multi-fields such as
-  `process.executable.caseless`. Check that hauslab's index mappings have them.
+- An EQL query fails, rather than matching nothing, if it names a field that
+  none of the indices it searches maps. Check that hauslab's index mappings have
+  every field a converted query uses. `pipelines/elastic.yml` maps Windows
+  process paths to the base ECS fields (`process.executable`) instead of
+  `ecs_windows`' `.caseless` multi-fields, which only some indices map.
 - Elastic rules use Kibana's default index patterns. To use hauslab's, set
   `options: {index_names: [...]}` under `elastic` in `pipelines/targets.yml`.
 

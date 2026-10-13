@@ -16,4 +16,23 @@
 #             product: windows
 name: custom_elastic
 priority: 10
-transformations: []
+transformations:
+    # ecs_windows maps these to `.caseless` multi-fields (process.executable.caseless, ...),
+    # a workaround for Lucene's case-sensitive matching. EQL already compares
+    # case-insensitively, and an EQL query that names a field the searched indices don't
+    # map fails instead of matching nothing. Only some indices (Elastic Defend's) map
+    # `.caseless`, so query the base ECS fields.
+    - id: elastic_custom_no_caseless
+      type: field_name_mapping
+      mapping:
+          Image: process.executable
+          ParentImage: process.parent.executable
+          SourceImage: process.executable
+          Destination: process.executable
+          Application: process.executable
+          NewProcessName: process.executable
+          ParentProcessName: process.parent.name
+          ProcessName: process.executable
+      rule_conditions:
+          - type: logsource
+            product: windows

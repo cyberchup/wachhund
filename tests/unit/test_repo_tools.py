@@ -109,6 +109,11 @@ def test_clean_fixture_passes_everything(tmp_path):
     assert 'ParentImage="*\\\\hauslab_fixture.exe"' in (tmp_path / "build" / "splunk" / "proc_creation_win_hauslab_fixture_child.spl").read_text()
     elastic_rule = json.loads((tmp_path / "build" / "elastic" / "proc_creation_win_hauslab_fixture_child.ndjson").read_text())
     assert elastic_rule["rule_id"] == RULE_ID
+    # EQL's `:` is case-insensitive, so the base ECS fields are queried, not `.caseless`.
+    assert (elastic_rule["type"], elastic_rule["language"]) == ("eql", "eql")
+    assert elastic_rule["query"] == (
+        'any where process.parent.executable:"*\\\\hauslab_fixture.exe" and process.executable:"*\\\\cmd.exe"'
+    )
 
 
 def test_benign_event_that_matches_fails_the_run(tmp_path):
@@ -246,7 +251,7 @@ def test_security_log_rule_converts_for_both_targets(tmp_path):
     assert results == {"elastic": None, "kusto": None, "splunk": None}
     # ecs_windows adds the channel condition itself; it isn't an unmapped rule field.
     elastic_rule = json.loads((tmp_path / "build" / "elastic" / "proc_creation_win_hauslab_fixture_child.ndjson").read_text())
-    assert elastic_rule["query"].startswith("winlog.channel:Security AND")
+    assert elastic_rule["query"].startswith('any where winlog.channel:"Security" and')
     # azure_monitor picks no table for `service: security`; pipelines/kusto.yml sets SecurityEvent.
     kql = (tmp_path / "build" / "kusto" / "proc_creation_win_hauslab_fixture_child.kql").read_text()
     assert kql.startswith("SecurityEvent\n")
