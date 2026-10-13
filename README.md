@@ -41,3 +41,15 @@ maintainer has run its atomic in hauslab and seen it fire.
 
 To run the same checks as CI, see
 [CONVENTIONS.md, section 9](CONVENTIONS.md#9-tests-and-ci).
+
+## License
+
+wachhund is released under the [Detection Rule License (DRL) 1.1](LICENSE.md),
+the license SigmaHQ uses for its rules. You can use, modify, and share the rules,
+including commercially. If you share them, keep each rule's `author` field, a link
+to the rule or this repo, and a pointer to the license. Alerts that the rules
+produce must also credit the rule's authors.
+
+Many rules here are adapted from [SigmaHQ](https://github.com/SigmaHQ/sigma) and
+keep their upstream authors. See
+[CONVENTIONS.md, section 8](CONVENTIONS.md#8-rules-derived-from-sigmahq).
