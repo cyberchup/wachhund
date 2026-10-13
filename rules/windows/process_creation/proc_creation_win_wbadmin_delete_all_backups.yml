@@ -1,0 +1,42 @@
+title: Suspicious Deletion of All Windows Backups via Wbadmin.EXE
+id: 9dee06f9-34c4-4875-90e0-600fa3e97315
+related:
+    - id: 639c9081-f482-47d3-a0bd-ddee3d4ecd76
+      type: derived
+status: experimental
+description: |
+    Detects wbadmin.exe deleting all Windows backups or system state backups with -keepVersions:0, which leaves nothing to restore the server from.
+    Ransomware does this before encrypting. The command only succeeds on Windows Server with Windows Server Backup installed, but the attempt is suspicious on any host.
+license: DRL-1.1
+references:
+    - https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/wbadmin-delete-systemstatebackup
+    - https://github.com/SigmaHQ/sigma/blob/42478221b1a062411b8185732c82caa439271122/rules/windows/process_creation/proc_creation_win_wbadmin_delete_all_backups.yml
+    - https://github.com/redcanaryco/atomic-red-team/blob/388942adbd9641f4dfdcf079d7efe9a75ec0ac43/atomics/T1490/T1490.yaml
+author: frack113, Nasreddine Bencherchali (Nextron Systems), cyberchup
+date: 2026-10-13
+tags:
+    - attack.impact
+    - attack.t1490
+logsource:
+    category: process_creation
+    product: windows
+    definition: 'Requirements: Sysmon EID 1 or Security 4688 with command-line auditing'
+detection:
+    selection_img:
+        - Image|endswith: '\wbadmin.exe'
+        - OriginalFileName: 'WBADMIN.EXE'
+    selection_cli:
+        CommandLine|contains|all:
+            - 'delete'
+            - 'backup'  # also covers systemstatebackup
+        CommandLine|contains: 'keepVersions:0'
+    condition: all of selection_*
+falsepositives:
+    - Administrators deleting all system state backups before reconfiguring or decommissioning Windows Server Backup
+level: high
+regression_tests_path: regression_data/rules/windows/process_creation/proc_creation_win_wbadmin_delete_all_backups/info.yml
+simulation:
+    - type: atomic-red-team
+      name: Windows - wbadmin Delete systemstatebackup
+      technique: T1490
+      atomic_guid: 584331dd-75bc-4c02-9e0b-17f5fd81c748
