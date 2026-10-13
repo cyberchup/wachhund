@@ -29,12 +29,12 @@ pip install -r requirements.txt
 - [ ] **Samples behave:** `python tests/regression_tests_runner.py <path to the rule>`
 - [ ] **It converts:** `python tests/convert_rules.py <path to the rule>`. An
       unmapped field gets a mapping in `pipelines/`; never rename it in the rule.
-- [ ] **The queries mean what the rule means.** Read the output in `build/elastic/`
-      and `build/kusto/`. Look out for wildcards in the middle of a value, which
-      Kusto splits into separate, unordered `contains` checks. Also look out for
-      regex: Elastic's EQL runs it with Lucene's limited regex syntax, which has
-      no `(?i)` and mangles many patterns. Plain
-      `contains`, `startswith` and `endswith` values convert the same on both.
+- [ ] **The queries mean what the rule means.** The conversion step already fails
+      the known problem values: regex on Elastic, and wildcards inside a value on
+      Kusto ([CONVENTIONS.md, section 9](CONVENTIONS.md#9-tests-and-ci)). That
+      check covers only those forms, so still read the output in `build/elastic/`
+      and `build/kusto/`. Plain `contains`, `startswith` and `endswith` values
+      convert the same on both.
 - [ ] **The full CI set passes.** Before pushing, run everything CI runs:
 
 ```text

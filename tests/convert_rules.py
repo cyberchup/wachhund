@@ -2,7 +2,8 @@
 
 Writes one file per rule and target under the output folder; CI uploads it as the
 `platform-queries` artifact. Exits non-zero if a rule fails to convert for a required
-target, or uses a field that no pipeline maps for it. Problems with best-effort targets
+target, uses a field that no pipeline maps for it, or uses a value form that the target
+converts into a query with a different meaning. Problems with best-effort targets
 (`required: false`) are reported but don't fail the run.
 """
 
@@ -20,6 +21,7 @@ from sigma.exceptions import SigmaError
 from sigma.processing.pipeline import ProcessingPipeline
 from sigma.processing.transformations.base import FieldMappingTransformationBase
 from sigma.rule import SigmaRule
+from sigma.types import SigmaExpansion, SigmaRegularExpression, SigmaString, SpecialChars
 
 from repo import ROOT, iter_detection_items, iter_rule_files, load_yaml, rel, resolve_pipeline, sigma_plugins, write_step_summary
 
@@ -30,6 +32,31 @@ INVALID_FIELD = re.compile(r"Invalid SigmaDetectionItem field name encountered: 
 REPO_URL = "https://github.com/cyberchup/wachhund"
 REPO_LICENSE = "DRL-1.1"
 DRL_URL = "https://github.com/SigmaHQ/Detection-Rule-License"
+
+
+def regex(value: object) -> str | None:
+    return str(value.regexp) if isinstance(value, SigmaRegularExpression) else None
+
+
+def inner_wildcard(value: object) -> str | None:
+    """A `?` anywhere, or a `*` that isn't part of the value's leading or trailing `*`s."""
+    if not isinstance(value, SigmaString):
+        return None
+    parts = list(value.s)
+    while parts and parts[0] is SpecialChars.WILDCARD_MULTI:
+        parts.pop(0)
+    while parts and parts[-1] is SpecialChars.WILDCARD_MULTI:
+        parts.pop()
+    return str(value) if any(isinstance(part, SpecialChars) for part in parts) else None
+
+
+# Value forms that a backend converts without an error into a query with a different
+# meaning (CONVENTIONS.md, section 9). Targets list the forms they get wrong in
+# `unfaithful_values` in pipelines/targets.yml.
+UNFAITHFUL_VALUES = {
+    "regex": regex,
+    "inner_wildcard": inner_wildcard,
+}
 
 
 @dataclass
@@ -76,6 +103,23 @@ def unmapped_fields(rules: list[SigmaRule], pipeline: ProcessingPipeline, fallba
     return found
 
 
+def unfaithful_values(rules: list[SigmaRule], forms: list[str], original: dict[int, str]) -> list[str]:
+    """The rule's own values in a form that this target's query would match differently."""
+    found: list[str] = []
+    for rule in rules:
+        for item in iter_detection_items(rule):
+            if id(item) not in original:
+                continue
+            values = [v for value in item.value for v in (value.values if isinstance(value, SigmaExpansion) else [value])]
+            for form in forms:
+                for value in values:
+                    text = UNFAITHFUL_VALUES[form](value)
+                    label = f"{original[id(item)] or 'keyword'} '{text}' ({form.replace('_', ' ')})"
+                    if text is not None and label not in found:
+                        found.append(label)
+    return found
+
+
 def attribution(rule: SigmaRule, rule_path: str) -> list[str]:
     """What DRL 1.1 asks a shared rule to keep: its authors, a link to it, and its license."""
     rule_license = rule.license or REPO_LICENSE
@@ -119,6 +163,11 @@ def convert(rule_path: Path, target: str, config: dict, out_dir: Path, root: Pat
         if unmapped:
             result.problem = "unmapped field(s): " + ", ".join(unmapped)
             return result
+
+    unfaithful = unfaithful_values(rules, config.get("unfaithful_values") or [], original)
+    if unfaithful:
+        result.problem = "query would match differently from the rule: " + ", ".join(unfaithful)
+        return result
 
     target_dir = out_dir / target
     target_dir.mkdir(parents=True, exist_ok=True)
