@@ -10,7 +10,10 @@
 # summary but don't fail CI.
 
 elastic:
-    backend: lucene
+    # EQL, not Lucene: EQL's `:` and `like~` compare strings case-insensitively, as Sigma
+    # does. Lucene compares keyword and wildcard fields such as process.command_line
+    # case-sensitively, so it missed `CERTUTIL -URLCACHE` and similar.
+    backend: eql
     format: siem_rule_ndjson
     extension: ndjson
     required: true

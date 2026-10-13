@@ -32,7 +32,8 @@ pip install -r requirements.txt
 - [ ] **The queries mean what the rule means.** Read the output in `build/elastic/`
       and `build/kusto/`. Look out for wildcards in the middle of a value, which
       Kusto splits into separate, unordered `contains` checks. Also look out for
-      regex, which the Elastic (Lucene) query can't run in most forms. Plain
+      regex: Elastic's EQL runs it with Lucene's limited regex syntax, which has
+      no `(?i)` and mangles many patterns. Plain
       `contains`, `startswith` and `endswith` values convert the same on both.
 - [ ] **The full CI set passes.** Before pushing, run everything CI runs:
 
@@ -73,9 +74,9 @@ Take `<technique>` and `<atomic_guid>` from the rule's `simulation` entry.
 | Anything else | The event type that `definition` names |
 
 - [ ] **The fields exist.** Open one of those events and check it has the fields
-      the converted query uses. Multi-fields such as `process.executable.caseless`
-      only appear in the index mapping. Look for them in the data view's field list
-      under Stack Management → Data Views.
+      the converted query uses. An EQL rule fails if any of them isn't mapped in
+      the indices it searches, so also check the data view's field list under
+      Stack Management → Data Views.
 - [ ] **You know what the atomic does.** Run
       `Invoke-AtomicTest <technique> -TestGuids <atomic_guid> -ShowDetails` and
       read the commands, inputs, prerequisites, cleanup, and whether it needs
@@ -114,10 +115,11 @@ Check in this order:
    `options: {index_names: [...]}` under `elastic` in `pipelines/targets.yml`.
 3. **Do the field names match?** Compare the event's fields with the converted
    query. Fix a mismatch with a mapping in `pipelines/elastic.yml`, not in the rule.
-4. **Do the values match, including case?** Elastic compares some fields
-   case-sensitively, for example `process.command_line`.
+4. **Do the values match?** The EQL query ignores case, but not other
+   differences, such as a full path where the query expects a file name.
 5. **Did the rule run cleanly?** Check the Execution results tab on the rule's
-   page in Kibana for errors, warnings or gaps.
+   page in Kibana for errors, warnings or gaps. An EQL rule whose query names a
+   field the indices don't map fails here with an error that names the field.
 6. **Was it a timing miss?** If the event was indexed after the rule had already
    searched that window, raise the rule's **Additional look-back time** for the
    test and run the atomic again.
