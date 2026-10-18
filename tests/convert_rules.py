@@ -4,7 +4,8 @@ Writes one file per rule and target under the output folder; CI uploads it as th
 `platform-queries` artifact. Exits non-zero if a rule fails to convert for a required
 target, uses a field that no pipeline maps for it, or uses a value form that the target
 converts into a query with a different meaning. Problems with best-effort targets
-(`required: false`) are reported but don't fail the run.
+(`required: false`) are reported but don't fail the run. Where tests/backends.py fixes a
+backend, its class converts instead of the installed one.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from sigma.processing.transformations.base import FieldMappingTransformationBase
 from sigma.rule import SigmaRule
 from sigma.types import SigmaExpansion, SigmaRegularExpression, SigmaString, SpecialChars
 
+from backends import BACKENDS
 from repo import ROOT, iter_detection_items, iter_rule_files, load_yaml, rel, resolve_pipeline, sigma_plugins, write_step_summary
 
 # Raised by the Kusto pipelines when a field isn't a column of the target table.
@@ -148,7 +150,8 @@ def convert(rule_path: Path, target: str, config: dict, out_dir: Path, root: Pat
     original = {id(item): item.field for rule in rules for item in iter_detection_items(rule)}
     try:
         pipeline = resolve_pipeline(route["pipelines"], config["backend"], root)
-        backend = sigma_plugins().backends[config["backend"]](processing_pipeline=pipeline, **(config.get("options") or {}))
+        backend_class = BACKENDS.get(config["backend"]) or sigma_plugins().backends[config["backend"]]
+        backend = backend_class(processing_pipeline=pipeline, **(config.get("options") or {}))
         output = backend.convert(collection, config.get("format", "default"))
     except SigmaError as error:
         invalid = INVALID_FIELD.search(str(error))

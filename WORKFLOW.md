@@ -15,7 +15,7 @@ flowchart TD
     F -- no --> C
     F -- yes --> G[Merge to main]
     G --> H[7. Deploy to hauslab]
-    H --> I[8. Run the atomic]
+    H --> I[8. Run the atomic or procedure]
     I --> J{Did it fire?}
     J -- no --> K[Fix the mapping or the rule] --> B
     J -- yes --> L[9. Record the validation]
@@ -29,8 +29,11 @@ flowchart TD
   exists, adapt it instead of writing a duplicate, and keep its attribution
   ([CONVENTIONS.md, section 8](CONVENTIONS.md#8-rules-derived-from-sigmahq)).
 - Find the [Atomic Red Team](https://github.com/redcanaryco/atomic-red-team) test
-  that produces the behavior. Every rule needs one. If none exists, decide with the
-  maintainer before writing the rule.
+  that produces the behavior. For a firewall rule, an atomic run on a host behind
+  the firewall counts. If none fits, decide with the maintainer before writing the
+  rule. If they agree, the rule gets a manual `simulation` entry instead: the steps
+  that produce the events in hauslab
+  ([CONVENTIONS.md, section 4](CONVENTIONS.md#simulation)).
 
 ## 2. Create a branch
 
@@ -47,7 +50,8 @@ git switch -c rule/<rule file name without .yml>
 - Folder, file name and field order follow CONVENTIONS.md, sections 1 to 3.
 - Start at `status: experimental` with a fresh id:
   `python -c "import uuid; print(uuid.uuid4())"`.
-- Use current ATT&CK tags (v19) and add the `simulation` entry for the atomic.
+- Use current ATT&CK tags (v19) and add the `simulation` entry for the atomic, or
+  the manual entry.
 
 ## 4. Write the tests
 
@@ -117,8 +121,8 @@ Only the maintainer does this step and decides whether a rule fired. Follow
 
 1. Before running anything, check that hauslab collects the events the rule needs,
    and read what the atomic does.
-2. Run the atomic from the rule's `simulation` entry with Invoke-AtomicRedTeam,
-   then clean up.
+2. Run the atomic from the rule's `simulation` entry with Invoke-AtomicRedTeam, or
+   follow a manual entry's steps, then clean up.
 3. Check that the Elastic rule raised an alert.
 4. If it didn't, work through the troubleshooting list in TESTING.md. A field-name
    mismatch is fixed in `pipelines/elastic.yml`; a gap in the logic is fixed in the

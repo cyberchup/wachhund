@@ -1,11 +1,12 @@
 """Check the repository rules that `sigma check` doesn't cover (see CONVENTIONS.md).
 
-Per rule: ATT&CK tactic and technique tags, the Atomic Red Team `simulation` reference,
-true-positive and benign tests in SigmaHQ's info.yml format, the status gate (`test` or
-`stable` needs a recorded hauslab validation), folder placement, and public-repo hygiene.
-Across the repo: duplicate rule ids and test data that no rule points to.
+Per rule: ATT&CK tactic and technique tags, the `simulation` entry (an Atomic Red Team
+test, or a manual procedure when no atomic fits), true-positive and benign tests in
+SigmaHQ's info.yml format, the status gate (`test` or `stable` needs a recorded hauslab
+validation), folder placement, and public-repo hygiene. Across the repo: duplicate rule ids
+and test data that no rule points to.
 
-With --online, each `simulation` entry is also checked against the Atomic Red Team repo.
+With --online, each Atomic Red Team entry is also checked against the Atomic Red Team repo.
 """
 
 from __future__ import annotations
@@ -34,6 +35,8 @@ SAMPLE_TYPES = {".json": {"json"}, ".jsonl": {"jsonl", "ndjson"}}
 PLATFORMS = {"elastic", "defender-xdr", "sentinel", "cortex-xdr", "sentinelone"}
 PRODUCT_FOLDERS = {"windows", "linux", "macos"}
 ART_URL = "https://raw.githubusercontent.com/redcanaryco/atomic-red-team/master/atomics/{0}/{0}.yaml"
+# What a `type: manual` simulation entry needs besides name and technique (CONVENTIONS.md, section 4).
+MANUAL_KEYS = {"reason": "why no Atomic Red Team test fits", "steps": "how to produce the events in hauslab"}
 
 # Public-repo hygiene (CONVENTIONS.md, section 7).
 ALLOWED_DOMAINS = ("hauslab.local", "example.com", "example.net", "example.org")
@@ -62,21 +65,24 @@ def check_rule(path: Path, root: Path, online: bool, atomics: dict) -> list[str]
 
 def check_simulation(simulation: Any, online: bool, atomics: dict) -> list[str]:
     if not simulation:
-        return ["needs a `simulation` entry referencing an Atomic Red Team test"]
+        return ["needs a `simulation` entry: an Atomic Red Team test, or a manual procedure if the maintainer agrees none fits"]
     if not isinstance(simulation, list):
         return ["`simulation` must be a list"]
     problems = []
     for entry in simulation:
         entry = entry if isinstance(entry, dict) else {}
         technique, guid, name = str(entry.get("technique", "")), str(entry.get("atomic_guid", "")), entry.get("name")
-        if entry.get("type") != "atomic-red-team":
-            problems.append("simulation: `type` must be atomic-red-team")
         if not TECHNIQUE_ID.match(technique):
             problems.append(f"simulation: technique {technique!r} must look like T1234 or T1234.001")
-        if not UUID.match(guid):
-            problems.append(f"simulation: atomic_guid {guid!r} is not a lowercase UUID")
         if not name:
             problems.append("simulation: `name` is required")
+        if entry.get("type") == "manual":
+            problems += [f"simulation: a manual entry needs `{key}` ({why})" for key, why in MANUAL_KEYS.items() if not entry.get(key)]
+            continue
+        if entry.get("type") != "atomic-red-team":
+            problems.append("simulation: `type` must be atomic-red-team, or manual when no atomic fits")
+        if not UUID.match(guid):
+            problems.append(f"simulation: atomic_guid {guid!r} is not a lowercase UUID")
         if online and TECHNIQUE_ID.match(technique) and UUID.match(guid):
             problems += verify_atomic(technique, guid, name, atomics)
     return problems

@@ -47,6 +47,12 @@ rules/
   `bits_client/`). Some upstream service folders are shortened
   (`codeintegrity-operational` → `code_integrity/`), so copy SigmaHQ's folder
   name rather than deriving it.
+- Firewall rules, Palo Alto (PAN-OS) ones included, use the generic
+  `category: firewall` logsource with no `product`, and go in
+  `rules/network/firewall/`, as SigmaHQ's do. SigmaHQ's validators know no
+  firewall logsource with `product: paloalto`, so `sigma check` fails one. The
+  pipelines scope firewall rules to PAN-OS data
+  ([section 9](#9-tests-and-ci)).
 - SigmaHQ keeps special-purpose rules in separate root folders. Use one only
   when a rule fits it:
 
@@ -180,7 +186,7 @@ falsepositives:
     - <Specific and capitalized; or Unknown / Unlikely>
 level: medium
 regression_tests_path: regression_data/rules/windows/process_creation/<rule file name without .yml>/info.yml
-simulation:
+simulation:                                         # or type: manual, see section 4
     - type: atomic-red-team
       name: <atomic test name>
       technique: T<NNNN>.<NNN>
@@ -276,6 +282,9 @@ See [Tags](#5-tags).
 - Use Sigma taxonomy field names (`Image`, `CommandLine`, `ParentImage`,
   `TargetObject`, ...), never platform-native ones (`process.command_line`,
   `ProcessCommandLine`). Mapping to ECS or Kusto is the pipeline's job.
+- Firewall rules use Sigma's firewall fields, `src_ip`, `src_port`, `dst_ip`
+  and `dst_port`, plus `action` as SigmaHQ's firewall rules use it. Section 9
+  lists what each one maps to.
 - **Repo rule:** if Elastic or Kusto has no mapping for a field, flag it and add
   the mapping to the repo's custom pipeline, not to the rule.
 - Put a single value on the same line (`Image|endswith: '\reg.exe'`). Write two
@@ -386,13 +395,37 @@ simulation:
   key. `technique` must be the current ATT&CK ID. Atomic Red Team renamed its
   folders for ATT&CK v19: the test above moved from `atomics/T1562.001/` to
   `atomics/T1685/` with the same GUID. Some SigmaHQ rules still show the old ID.
-- `type` is always `atomic-red-team`. A few SigmaHQ rules use `atomic`; don't
-  copy that.
+- `type` is `atomic-red-team` for an atomic. A few SigmaHQ rules use `atomic`;
+  don't copy that. The only other type is the repo's `manual`, below.
 - `name` matches the atomic's `name` exactly.
-- CI checks every entry against the Atomic Red Team repo: the technique folder
-  exists, the GUID is in it, and the name matches.
+- CI checks every atomic entry against the Atomic Red Team repo: the technique
+  folder exists, the GUID is in it, and the name matches.
 - If no atomic covers the behavior, raise it with the maintainer. Don't point
-  at a test that only roughly matches.
+  at a test that only roughly matches. For a firewall rule, an atomic run on a
+  host behind the firewall counts, because the firewall logs the traffic it
+  makes.
+
+**Repo rule: when no atomic fits.** If the maintainer agrees that no atomic
+covers the behavior, the rule gets a manual entry instead. It says how to
+produce the events in hauslab:
+
+```yaml
+simulation:
+    - type: manual
+      name: <short name for the procedure>
+      technique: T<NNNN>.<NNN>
+      reason: <why no Atomic Red Team test fits>
+      steps: |
+          <what to run, on which hauslab host, against what target, and how to clean up>
+```
+
+- `name`, `technique`, `reason` and `steps` are required. CI checks that
+  they're there, but it can't judge the reason; the maintainer agrees to it in
+  the pull request.
+- `steps` follow [Public-repo hygiene](#7-public-repo-hygiene): hauslab hosts
+  and documentation addresses only.
+- A rule can have both kinds of entry, for example an atomic for one variant of
+  the behavior and a manual entry for another.
 
 ## 5. Tags
 
@@ -516,15 +549,22 @@ Conversion picks each target's backend and pipelines by logsource, as set in
   as Sigma does; Lucene compares fields such as `process.command_line`
   case-sensitively. Windows rules go through `ecs_windows` (Winlogbeat-style ECS)
   and macOS rules through `ecs_macos_esf`. Every other product needs its mappings
-  in `pipelines/elastic.yml`.
+  in `pipelines/elastic.yml`. Firewall rules query PAN-OS logs from Elastic's
+  Palo Alto Networks integration (`panw`): the pipeline adds
+  `event.dataset:"panw.panos"`, so a firewall rule doesn't also match endpoint
+  network events, which use the same ECS fields.
 - **Kusto:** Defender XDR advanced hunting tables through `microsoft_xdr`.
   Windows Security log rules go to Sentinel's `SecurityEvent` table and System
   log rules to its `Event` table, both through `azure_monitor`. `azure_monitor`
   doesn't pick a table for `service: security` or `service: system`, so
   `pipelines/kusto.yml` sets it. In the `Event` table, event data fields are only
   inside the `EventData` XML, so a System log rule can only match columns such as
-  `EventID` and `Source`. Sentinel ASIM isn't used: in
-  pySigma-backend-kusto 1.0.1 its pipeline fails on `OriginalFileName`.
+  `EventID` and `Source`. Firewall rules go to Sentinel's `CommonSecurityLog`
+  table, where the Palo Alto Networks data connector stores PAN-OS logs sent as
+  CEF. That table holds CEF from every vendor, so the pipeline adds
+  `DeviceVendor =~ "Palo Alto Networks"`, as Sentinel's own PAN-OS rules do.
+  Sentinel ASIM isn't used: in pySigma-backend-kusto 1.0.1 its pipeline fails on
+  `OriginalFileName`.
 - **Splunk (best-effort):** plain SPL through `splunk_windows`, which keeps
   Sigma's field names (the Windows event field names). The queries aren't scoped
   to an index; add yours when deploying. Problems are reported in the CI summary
@@ -538,6 +578,37 @@ Conversion picks each target's backend and pipelines by logsource, as set in
 When conversion flags a field, add a mapping to `pipelines/elastic.yml` or
 `pipelines/kusto.yml` that points at a field hauslab's data really has. Don't
 rename the field in the rule; rules keep Sigma field names.
+
+Firewall fields map as follows:
+
+| Sigma field | Elastic (`panw`) | Kusto (`CommonSecurityLog`) |
+| --- | --- | --- |
+| `src_ip` | `source.ip` | `SourceIP` |
+| `src_port` | `source.port` | `SourcePort` |
+| `dst_ip` | `destination.ip` | `DestinationIP` |
+| `dst_port` | `destination.port` | `DestinationPort` |
+| `action` | `panw.panos.action` | `DeviceAction` |
+
+- `action` holds PAN-OS's own value on both targets: `allow`, `deny`, `drop`,
+  `reset-client`, `reset-server`, `reset-both` and others. ECS `event.action`
+  isn't used, because `panw` puts the log subtype there (`flow_started`,
+  `flow_denied`, ...).
+- `username` isn't mapped. PAN-OS sends `domain\user`; CEF keeps it whole and
+  `panw` keeps only the user part, so no one value matches on both. A rule that
+  uses it fails conversion until that's decided.
+- Other PAN-OS fields (application, zones, threat and URL fields) get a mapping
+  when a rule needs one, in that rule's pull request.
+
+`convert_rules.py` converts with the subclasses of the EQL and Kusto backends in
+`tests/backends.py`. They fix forms that the pinned backends convert without an
+error but that the platform rejects. `sigma convert` with the same pipelines
+doesn't have these fixes:
+
+| Value | Target | Backend output | Converted as |
+| --- | --- | --- | --- |
+| A number | Elastic | `destination.port:4444`. EQL's `:` compares only strings, so the whole rule fails | `destination.port == 4444` |
+| A list of numbers | Elastic, Kusto | `like~ (4444, 5555)` and `in~ ("4444", "5555")`, string comparisons that fail on a number column | `in (4444, 5555)` |
+| A list of IP addresses | Elastic | `like~ ("203.0.113.10", ...)`, which fails on an IP field | `==` checks joined by `or` |
 
 Some values convert without an error into a query that matches something else.
 `convert_rules.py` fails these for the targets that list them under
@@ -563,6 +634,10 @@ Defaults to confirm against hauslab:
   `ecs_windows`' `.caseless` multi-fields, which only some indices map.
 - Elastic rules use Kibana's default index patterns. To use hauslab's, set
   `options: {index_names: [...]}` under `elastic` in `pipelines/targets.yml`.
+- The firewall mappings come from the `panw` integration's ingest pipeline
+  (version 5.5.3) and Microsoft's CEF-to-`CommonSecurityLog` table, not from
+  real PAN-OS data. Check one hauslab PAN-OS document for `event.dataset`,
+  `panw.panos.action` and the mapped ports and addresses.
 
 To run the same checks locally, from the repo root:
 
@@ -597,3 +672,20 @@ All checked 2026-10-05.
   <https://attack.mitre.org/tactics/enterprise/>
 - Detection Rule License 1.1:
   <https://github.com/SigmaHQ/Detection-Rule-License>
+
+Firewall sources, checked 2026-10-18:
+
+- Sigma taxonomy appendix (firewall fields):
+  <https://github.com/SigmaHQ/sigma-specification/blob/0c857d07da0e71eaaab2d667b3cce6f2c8469578/specification/sigma-appendix-taxonomy.md>
+- SigmaHQ's firewall rule, for `action`:
+  <https://github.com/SigmaHQ/sigma/blob/598d29f811c1859ba18e05b8c419cc94410c9a55/rules/network/firewall/net_firewall_cleartext_protocols.yml>
+- Elastic `panw` integration ingest pipelines:
+  <https://github.com/elastic/integrations/tree/a601e2797cb98dcc471d055e6bbfa3def9d5413d/packages/panw/data_stream/panos/elasticsearch/ingest_pipeline>
+- CEF key and `CommonSecurityLog` field mapping:
+  <https://learn.microsoft.com/en-us/azure/sentinel/cef-name-mapping>
+- Sentinel's PAN-OS analytics rules, for the `DeviceVendor` filter:
+  <https://github.com/Azure/Azure-Sentinel/tree/96a744b904918b97a4dfd6915a793e7eb9ed0b58/Solutions/PaloAlto-PAN-OS/Analytic%20Rules>
+- EQL operators (`:` compares only strings):
+  <https://www.elastic.co/docs/reference/query-languages/eql/eql-syntax>
+- Kusto backend issue on quoted numbers in lists:
+  <https://github.com/AttackIQ/pySigma-backend-kusto/issues/47>

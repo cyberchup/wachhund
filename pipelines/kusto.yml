@@ -56,3 +56,38 @@ transformations:
           - type: logsource
             product: windows
             service: system
+    # Firewall rules query Sentinel's CommonSecurityLog table, where the Palo Alto
+    # Networks data connector stores PAN-OS logs sent as CEF. azure_monitor has no table
+    # for `category: firewall`.
+    - id: kusto_custom_firewall_table
+      type: set_state
+      key: query_table
+      val: CommonSecurityLog
+      rule_conditions:
+          - type: logsource
+            category: firewall
+    # CommonSecurityLog holds CEF from every vendor, and the mappings below assume PAN-OS
+    # values (`action` is allow, deny, drop, reset-client, ...), so scope the query to
+    # Palo Alto, as Sentinel's own PAN-OS analytics rules do.
+    - id: kusto_custom_firewall_vendor
+      type: add_condition
+      conditions:
+          DeviceVendor: 'Palo Alto Networks'
+      rule_conditions:
+          - type: logsource
+            category: firewall
+    # Sigma's firewall fields (taxonomy appendix, plus `action` as SigmaHQ's firewall
+    # rules use it) to the columns that CEF's src, spt, dst, dpt and act keys fill.
+    # `username` isn't mapped: CEF's suser keeps PAN-OS's `domain\user`, while Elastic's
+    # panw integration keeps only the user part, so one value can't match on both.
+    - id: kusto_custom_firewall_fields
+      type: field_name_mapping
+      mapping:
+          src_ip: SourceIP
+          src_port: SourcePort
+          dst_ip: DestinationIP
+          dst_port: DestinationPort
+          action: DeviceAction
+      rule_conditions:
+          - type: logsource
+            category: firewall
