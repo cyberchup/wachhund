@@ -26,9 +26,11 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
+      # requirements.txt pins every package with hashes, so a changed or substituted
+      # download fails the install instead of running in CI.
       - name: Install dependencies
         id: install
-        run: pip install -r requirements.txt
+        run: pip install --require-hashes -r requirements.txt
 
       # Each check below runs even if an earlier one failed, so one run reports every problem.
       - name: Unit tests for the repo tooling

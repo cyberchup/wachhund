@@ -27,6 +27,7 @@ rule on each pull request and never commits the output.
 | `regression_data/` | True-positive and benign test events for each rule |
 | `pipelines/` | Conversion targets and field mappings for each platform |
 | `tests/` | The checks CI runs, including conversion and regression tests |
+| `requirements.in`, `requirements.txt` | The tooling's pinned dependencies, and the hashed lock CI installs |
 
 ## How a rule gets here
 

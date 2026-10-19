@@ -132,6 +132,15 @@ def attribution(rule: SigmaRule, rule_path: str) -> list[str]:
     ]
 
 
+def comment_text(line: str) -> str:
+    """One line without backticks, so it can't end the comment it's written into.
+
+    A line break ends a Kusto `//` comment and three backticks end a Splunk one; whatever
+    followed in the rule's title or author would run as part of the query.
+    """
+    return " ".join(line.replace("`", "").split())
+
+
 def convert(rule_path: Path, target: str, config: dict, out_dir: Path, root: Path = ROOT) -> Result:
     result = Result(rel(rule_path, root), target, required=bool(config.get("required", True)))
     try:
@@ -174,7 +183,7 @@ def convert(rule_path: Path, target: str, config: dict, out_dir: Path, root: Pat
     out_file = target_dir / f"{rule_path.stem}.{config.get('extension', 'txt')}"
     lines = [json.dumps(query) if isinstance(query, (dict, list)) else str(query) for query in output]
     if config.get("attribution_comment"):
-        notes = [config["attribution_comment"].format(line) for line in attribution(rules[0], result.rule)]
+        notes = [config["attribution_comment"].format(comment_text(line)) for line in attribution(rules[0], result.rule)]
         lines = lines + notes if config.get("attribution_at") == "end" else notes + lines
     out_file.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     result.output = rel(out_file, root)
