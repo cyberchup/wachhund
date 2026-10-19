@@ -1,0 +1,15 @@
+# The repo's direct dependencies, pinned so CI runs are reproducible. pySigma stays on
+# 1.x because every backend below requires pySigma < 2.0.
+#
+# Install from requirements.txt, not this file: it pins every package these pull in, with
+# hashes, and CI installs it with --require-hashes. After changing a pin here, regenerate
+# it with the command at the top of requirements.txt.
+sigma-cli==3.1.0
+pySigma==1.5.1
+pySigma-backend-elasticsearch==2.1.1
+pySigma-backend-kusto==1.0.1
+pySigma-backend-splunk==2.1.0
+pySigma-validators-sigmahq==0.21.0
+PyYAML==6.0.3
+yamllint==1.38.0
+pytest==9.1.1

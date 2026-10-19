@@ -2,8 +2,9 @@
 
 Per rule: ATT&CK tactic and technique tags, the Atomic Red Team `simulation` reference,
 true-positive and benign tests in SigmaHQ's info.yml format, the status gate (`test` or
-`stable` needs a recorded hauslab validation), folder placement, and public-repo hygiene.
-Across the repo: duplicate rule ids and test data that no rule points to.
+`stable` needs a recorded hauslab validation), folder placement, one-line title, author and
+license, and public-repo hygiene in the rule, its info.yml and its samples. Across the repo:
+duplicate rule ids, test data that no rule points to, and public-repo hygiene in pipelines/.
 
 With --online, each `simulation` entry is also checked against the Atomic Red Team repo.
 """
@@ -35,11 +36,28 @@ PLATFORMS = {"elastic", "defender-xdr", "sentinel", "cortex-xdr", "sentinelone"}
 PRODUCT_FOLDERS = {"windows", "linux", "macos"}
 ART_URL = "https://raw.githubusercontent.com/redcanaryco/atomic-red-team/master/atomics/{0}/{0}.yaml"
 
+# Rule fields the build copies into comments in the converted queries (CONVENTIONS.md, section 8).
+COMMENT_FIELDS = ("title", "author", "license")
+
 # Public-repo hygiene (CONVENTIONS.md, section 7).
 ALLOWED_DOMAINS = ("hauslab.local", "example.com", "example.net", "example.org")
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})")
 INTERNAL_HOST = re.compile(r"\b((?:[A-Za-z0-9-]+\.)+(?:local|lan|corp|internal|intranet|localdomain))\b", re.IGNORECASE)
-IP_KEY = re.compile(r"ip|addr", re.IGNORECASE)
+IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
+# File and product versions such as 1.0.0.0 look like IP addresses.
+VERSION_KEY = re.compile(r"version", re.IGNORECASE)
+# The domain or computer in front of an account: `DOMAIN\user` as a whole value, or after a
+# command-line switch such as `net use ... /user:DOMAIN\user`.
+QUALIFIED_USER = re.compile(r"^([^\\\s:][^\\:]*)\\[^\\]*$")
+USER_SWITCH = re.compile(r"(?:^|[\s\"'])[/-]u(?:ser)?[:\s]\s*\"?([^\s\"\\/:]+)\\", re.IGNORECASE)
+USER_KEY = re.compile(r"user|account", re.IGNORECASE)
+DOMAIN_KEY = re.compile(r"domain", re.IGNORECASE)
+# Allowed in front of an account: hauslab's domain, Windows' built-in names, and generic host
+# names such as ws02 for local accounts. Environment variables such as %userdomain% also pass.
+ACCOUNT_DOMAINS = {"hauslab", "nt authority", "builtin", "nt service", "window manager", "font driver host", "iis apppool", "nt virtual machine", "workgroup", "-", "."}
+GENERIC_HOST = re.compile(r"[a-z]{1,4}-?\d{1,3}", re.IGNORECASE)
+TENANT_KEY = re.compile(r"tenant|subscription", re.IGNORECASE)
+GUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
 
 
 def check_rule(path: Path, root: Path, online: bool, atomics: dict) -> list[str]:
@@ -55,9 +73,19 @@ def check_rule(path: Path, root: Path, online: bool, atomics: dict) -> list[str]
     problems += check_simulation(data.get("simulation"), online, atomics)
     problems += check_folder(path, data, root)
     problems += check_tests(path, data, root)
+    problems += check_comment_fields(data)
     rule_text = {key: value for key, value in data.items() if key != "references"}
-    problems += [f"rule: {problem}" for problem in hygiene(rule_text, check_ips=False)]
+    problems += [f"rule: {problem}" for problem in hygiene(rule_text, strict=False)]
     return problems
+
+
+def check_comment_fields(data: dict) -> list[str]:
+    """A line break or backtick would end the comment the build writes the field into."""
+    return [
+        f"`{field}` must be one line without backticks: the build copies it into comments in the converted queries"
+        for field in COMMENT_FIELDS
+        if isinstance(data.get(field), str) and ("".join(data[field].splitlines()) != data[field] or "`" in data[field])
+    ]
 
 
 def check_simulation(simulation: Any, online: bool, atomics: dict) -> list[str]:
@@ -125,6 +153,8 @@ def check_tests(path: Path, data: dict, root: Path) -> list[str]:
         return problems + [f"regression_tests_path {info_path} doesn't exist"]
 
     info = load_yaml(root / info_path) or {}
+    # The raw text, so comments are checked too.
+    problems += [f"info.yml: {problem}" for problem in hygiene((root / info_path).read_text(encoding="utf-8"), strict=True)]
     metadata = info.get("rule_metadata") or [{}]
     if not isinstance(metadata[0], dict) or str(metadata[0].get("id")) != rule_id:
         problems.append("info.yml: rule_metadata[0].id must equal the rule id")
@@ -175,12 +205,17 @@ def check_sample(test: dict, rule_id: str, info_file: Path, root: Path) -> list[
             events = [json.loads(line) for line in text.splitlines() if line.strip()]
     except ValueError as error:
         return problems + [f"{label}: not valid JSON: {error}"]
-    problems += [f"{label}: {problem}" for problem in hygiene(events, check_ips=True)]
+    problems += [f"{label}: {problem}" for problem in hygiene(events, strict=True)]
     return problems
 
 
-def hygiene(node: Any, check_ips: bool) -> list[str]:
-    """Flag values that look like they came from somewhere other than hauslab."""
+def hygiene(node: Any, strict: bool) -> list[str]:
+    """Flag values that look like they came from somewhere other than hauslab.
+
+    It catches the common shapes of client data, not every one. `strict` (for sample events,
+    info.yml and pipelines) also flags public IPs and the values of domain fields, which rules
+    may hold as IOCs or partial values.
+    """
     problems = []
     for key, value in _strings(node):
         for domain in EMAIL.findall(value):
@@ -189,19 +224,39 @@ def hygiene(node: Any, check_ips: bool) -> list[str]:
         for host in INTERNAL_HOST.findall(value):
             if not _allowed(host):
                 problems.append(f"internal hostname {host!r}: use a hauslab.local name")
-        if check_ips and IP_KEY.search(key):
-            try:
-                address = ipaddress.ip_address(value.strip())
-            except ValueError:
-                continue
-            if address.is_global:
-                problems.append(f"public IP {value!r}: use 192.0.2.0/24, 198.51.100.0/24 or 203.0.113.0/24")
+        domains = [match.group(1) for match in USER_SWITCH.finditer(value)]
+        if USER_KEY.search(key) and (match := QUALIFIED_USER.match(value)):
+            domains.append(match.group(1))
+        if strict and DOMAIN_KEY.search(key):
+            domains.append(value)
+        problems += [problem for domain in domains if (problem := _account_domain_problem(domain.strip()))]
+        if TENANT_KEY.search(key):
+            for guid in GUID.findall(value):
+                if len(set(guid.replace("-", ""))) > 1:
+                    problems.append(f"tenant or subscription ID {guid!r}: use 00000000-0000-0000-0000-000000000000")
+        if strict and not VERSION_KEY.search(key):
+            for text in dict.fromkeys([value.strip(), *IPV4.findall(value)]):
+                try:
+                    address = ipaddress.ip_address(text)
+                except ValueError:
+                    continue
+                if address.is_global:
+                    problems.append(f"public IP {text!r}: use 192.0.2.0/24, 198.51.100.0/24 or 203.0.113.0/24")
     return list(dict.fromkeys(problems))
 
 
 def _allowed(domain: str) -> bool:
     domain = domain.lower()
     return any(domain == allowed or domain.endswith("." + allowed) for allowed in ALLOWED_DOMAINS)
+
+
+def _account_domain_problem(domain: str) -> str | None:
+    if "." in domain.strip("."):
+        return None if _allowed(domain) else f"domain {domain!r}: use hauslab.local or an example.com name"
+    name = domain.lower()
+    if not name or name in ACCOUNT_DOMAINS or (name.startswith("%") and name.endswith("%")) or GENERIC_HOST.fullmatch(name):
+        return None
+    return f"domain {domain!r}: use HAUSLAB, a built-in Windows name such as NT AUTHORITY, or a generic host name such as ws01"
 
 
 def _strings(node: Any, key: str = "") -> Iterator[tuple[str, str]]:
@@ -237,6 +292,8 @@ def run(root: Path = ROOT, online: bool = False) -> dict[str, list[str]]:
         for info in sorted((root / "regression_data").rglob("info.yml")):
             if rel(info, root) not in referenced:
                 findings[rel(info, root)].append("no rule points to this test data (regression_tests_path)")
+    for path in sorted((root / "pipelines").glob("*.yml")) if (root / "pipelines").is_dir() else []:
+        findings[rel(path, root)] += hygiene(path.read_text(encoding="utf-8"), strict=True)
     return {path: problems for path, problems in findings.items() if problems}
 
 
