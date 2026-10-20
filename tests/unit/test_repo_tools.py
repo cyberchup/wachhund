@@ -358,3 +358,172 @@ def test_convert_accepts_wildcards_at_the_ends_of_a_value(tmp_path, extra):
     root = make_repo(tmp_path, extra=extra)
     results = {r.target: r.problem for r in convert_rules.run(root, out_dir=tmp_path / "build")}
     assert results == {"elastic": None, "kusto": None, "splunk": None}
+
+
+FIREWALL_ID = "e4c8e31b-2478-4eb6-b0ac-8853aa4d3692"
+FIREWALL_PATH = "rules/network/firewall/net_firewall_hauslab_fixture_port.yml"
+FIREWALL_DATA = "regression_data/rules/network/firewall/net_firewall_hauslab_fixture_port"
+FIREWALL_SIMULATION = """\
+simulation:
+    - type: manual
+      name: Allowed Connection to a Fixture Port
+      technique: T1571
+      reason: Fixture only; no atomic is meant to cover it.
+      steps: |
+          From ws01.hauslab.local, run `Test-NetConnection 203.0.113.10 -Port 4444`.
+"""
+
+FIREWALL_RULE = f"""\
+title: Potential Allowed Connection to Hauslab Fixture Ports
+id: {FIREWALL_ID}
+status: experimental
+description: Detects allowed connections to fixture ports. It exists only to exercise the repository tooling.
+references:
+    - https://example.com/fixture
+author: hauslab
+date: 2026-10-18
+tags:
+    - attack.command-and-control
+    - attack.t1571
+logsource:
+    category: firewall
+detection:
+    selection:
+        dst_port:
+            - 4444
+            - 5555
+        action: 'allow'
+{{extra}}    condition: selection
+falsepositives:
+    - Unknown
+level: medium
+regression_tests_path: {FIREWALL_DATA}/info.yml
+{{simulation}}"""
+
+FIREWALL_INFO = f"""\
+id: 2012c952-31e1-4962-a57b-9e74dea79bb0
+description: Fixture tests
+date: 2026-10-18
+author: hauslab
+rule_metadata:
+    - id: {FIREWALL_ID}
+      title: Potential Allowed Connection to Hauslab Fixture Ports
+regression_tests_info:
+    - name: Positive Detection Test
+      type: jsonl
+      match_count: 1
+      path: {FIREWALL_DATA}/{FIREWALL_ID}.jsonl
+    - name: Benign Look-alike Test
+      type: jsonl
+      match_count: 0
+      path: {FIREWALL_DATA}/{FIREWALL_ID}_benign.jsonl
+"""
+
+FIREWALL_TRUE_POSITIVE = {"src_ip": "10.20.0.15", "src_port": 49733, "dst_ip": "203.0.113.10", "dst_port": 4444, "action": "allow"}
+FIREWALL_BENIGN = {**FIREWALL_TRUE_POSITIVE, "dst_port": 443}
+
+
+def make_firewall_repo(root: Path, extra: str = "", simulation: str = FIREWALL_SIMULATION) -> Path:
+    shutil.copytree(ROOT / "pipelines", root / "pipelines")
+    rule = root / FIREWALL_PATH
+    rule.parent.mkdir(parents=True)
+    rule.write_text(FIREWALL_RULE.format(extra=extra, simulation=simulation), encoding="utf-8")
+    data = root / FIREWALL_DATA
+    data.mkdir(parents=True)
+    (data / "info.yml").write_text(FIREWALL_INFO, encoding="utf-8")
+    write_events(data / f"{FIREWALL_ID}.jsonl", FIREWALL_TRUE_POSITIVE)
+    write_events(data / f"{FIREWALL_ID}_benign.jsonl", FIREWALL_BENIGN)
+    return root
+
+
+def converted_queries(root: Path, build: Path, stem: str) -> dict[str, str]:
+    """The query each target produced, without attribution comments."""
+    elastic = json.loads((build / "elastic" / f"{stem}.ndjson").read_text())["query"]
+    kusto = "\n".join(line for line in (build / "kusto" / f"{stem}.kql").read_text().splitlines() if not line.startswith("//"))
+    return {"elastic": elastic, "kusto": kusto}
+
+
+def test_firewall_rule_with_manual_simulation_passes_everything(tmp_path):
+    root = make_firewall_repo(tmp_path)
+    assert check_rules.run(root) == {}
+    assert [o.passed for o in regression_tests_runner.run(root)] == [True, True]
+    results = convert_rules.run(root, out_dir=tmp_path / "build")
+    assert [(r.target, r.problem) for r in results] == [("elastic", None), ("kusto", None), ("splunk", None)]
+    # Both targets are scoped to PAN-OS data and compare the ports as numbers.
+    assert converted_queries(root, tmp_path / "build", "net_firewall_hauslab_fixture_port") == {
+        "elastic": 'any where event.dataset:"panw.panos" and ((destination.port in (4444, 5555)) and panw.panos.action:"allow")',
+        "kusto": 'CommonSecurityLog\n| where DeviceVendor =~ "Palo Alto Networks" and ((DestinationPort in (4444, 5555)) and DeviceAction =~ "allow")',
+    }
+
+
+@pytest.mark.parametrize(
+    ("simulation", "expected"),
+    [
+        (FIREWALL_SIMULATION.replace("      reason: Fixture only; no atomic is meant to cover it.\n", ""), "a manual entry needs `reason`"),
+        (FIREWALL_SIMULATION.split("      steps:")[0], "a manual entry needs `steps`"),
+        (FIREWALL_SIMULATION.replace("technique: T1571", "technique: t1571"), "technique 't1571' must look like"),
+        (FIREWALL_SIMULATION.replace("type: manual", "type: lab"), "`type` must be atomic-red-team, or manual"),
+    ],
+)
+def test_manual_simulation_needs_its_keys(tmp_path, simulation, expected):
+    found = problems(make_firewall_repo(tmp_path, simulation=simulation))
+    assert any(expected in problem for problem in found), found
+
+
+def test_hauslab_firewall_capture_needs_the_panw_dataset(tmp_path):
+    """A panw document matches through the Elastic pipeline; the same fields from another dataset don't."""
+    root = make_firewall_repo(tmp_path)
+    capture = {
+        "@timestamp": "2026-10-18T09:15:02.123Z",
+        "event": {"dataset": "panw.panos", "action": "flow_started"},
+        "source": {"ip": "10.20.0.15", "port": 49733},
+        "destination": {"ip": "203.0.113.10", "port": 4444},
+        "panw": {"panos": {"action": "allow"}},
+    }
+    endpoint = {**capture, "event": {"dataset": "windows.sysmon_operational"}}
+    write_events(root / FIREWALL_DATA / f"{FIREWALL_ID}_hauslab.jsonl", capture)
+    write_events(root / FIREWALL_DATA / f"{FIREWALL_ID}_endpoint.jsonl", endpoint)
+    with (root / FIREWALL_DATA / "info.yml").open("a", encoding="utf-8") as info:
+        for name, label, count in (("hauslab capture", "hauslab", 1), ("endpoint event", "endpoint", 0)):
+            info.write(
+                f"    - name: Detection Test - {name}\n      type: jsonl\n      match_count: {count}\n"
+                f"      path: {FIREWALL_DATA}/{FIREWALL_ID}_{label}.jsonl\n"
+                "      pipelines:\n          - pipelines/elastic.yml\n"
+            )
+    assert check_rules.run(root) == {}
+    assert [o.passed for o in regression_tests_runner.run(root)] == [True, True, True, True]
+
+
+def test_firewall_username_is_unmapped_on_both_targets(tmp_path):
+    # PAN-OS sends `domain\user`; Sentinel keeps it whole and Elastic's panw keeps only the user.
+    root = make_firewall_repo(tmp_path, extra="        username: 'labuser'\n")
+    results = {r.target: r.problem for r in convert_rules.run(root, out_dir=tmp_path / "build")}
+    assert results["elastic"] == "unmapped field(s): username"
+    assert results["kusto"] == "unmapped field: username is not a column of CommonSecurityLog"
+
+
+@pytest.mark.parametrize(
+    ("extra", "elastic", "kusto"),
+    [
+        # A single number: EQL's `:` compares only strings.
+        ("        src_port: 49733\n", "source.port == 49733", "SourcePort == 49733"),
+        # A list of IP addresses: EQL's `like~` compares only strings.
+        (
+            "        dst_ip:\n            - '203.0.113.10'\n            - '203.0.113.11'\n",
+            '(destination.ip=="203.0.113.10" or destination.ip=="203.0.113.11")',
+            '(DestinationIP in~ ("203.0.113.10", "203.0.113.11"))',
+        ),
+        # Numbers mixed with strings keep a string comparison for the strings.
+        (
+            "        dst_ip:\n            - '203.0.113.10'\n            - 7\n",
+            '(destination.ip=="203.0.113.10" or destination.ip == 7)',
+            '(DestinationIP in~ ("203.0.113.10", "7"))',
+        ),
+    ],
+)
+def test_numbers_and_addresses_convert_to_operators_the_target_accepts(tmp_path, extra, elastic, kusto):
+    root = make_firewall_repo(tmp_path, extra=extra)
+    convert_rules.run(root, out_dir=tmp_path / "build")
+    queries = converted_queries(root, tmp_path / "build", "net_firewall_hauslab_fixture_port")
+    assert elastic in queries["elastic"]
+    assert kusto in queries["kusto"]

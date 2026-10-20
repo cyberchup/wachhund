@@ -36,3 +36,31 @@ transformations:
       rule_conditions:
           - type: logsource
             product: windows
+    # Firewall rules query PAN-OS logs from Elastic's Palo Alto Networks integration
+    # (panw, data stream panw.panos). Without this scope a firewall rule would also match
+    # endpoint network events, which use the same ECS fields.
+    - id: elastic_custom_firewall_dataset
+      type: add_condition
+      conditions:
+          event.dataset: 'panw.panos'
+      rule_conditions:
+          - type: logsource
+            category: firewall
+    # Sigma's firewall fields (taxonomy appendix, plus `action` as SigmaHQ's firewall
+    # rules use it) to the fields the panw integration fills. Its ECS event.action holds
+    # the log subtype (flow_started, flow_denied, ...), so `action` maps to
+    # panw.panos.action, which keeps PAN-OS's own value (allow, deny, drop, ...), as
+    # Sentinel's DeviceAction does. `username` isn't mapped: panw splits PAN-OS's
+    # `domain\user` into source.user.domain and source.user.name, while Sentinel keeps
+    # it whole, so one value can't match on both.
+    - id: elastic_custom_firewall_fields
+      type: field_name_mapping
+      mapping:
+          src_ip: source.ip
+          src_port: source.port
+          dst_ip: destination.ip
+          dst_port: destination.port
+          action: panw.panos.action
+      rule_conditions:
+          - type: logsource
+            category: firewall

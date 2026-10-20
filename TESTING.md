@@ -56,7 +56,10 @@ run is recorded as validation
 > **Lab hosts only.** Atomics run real attacker techniques. Never run them on a
 > production or personal machine.
 
-Take `<technique>` and `<atomic_guid>` from the rule's `simulation` entry.
+Take `<technique>` and `<atomic_guid>` from the rule's `simulation` entry. A
+`type: manual` entry has no atomic: where this part says to read what the atomic
+does, read the entry's `steps`, and where it says to run the atomic, follow them.
+The Invoke-AtomicRedTeam steps don't apply.
 
 ### Before running the atomic
 
@@ -71,6 +74,7 @@ Take `<technique>` and `<atomic_guid>` from the rule's `simulation` entry.
 | --- | --- |
 | `category: process_creation` | `event.provider:"Microsoft-Windows-Sysmon" and event.code:1`, or `event.code:4688`, with `process.command_line` filled in |
 | `service: security` | `event.code:<the rule's EventID>` on the host that logs it, often a domain controller |
+| `category: firewall` | `event.dataset:"panw.panos"` with `destination.port` and `panw.panos.action` filled in, from the firewall the test traffic crosses |
 | Anything else | The event type that `definition` names |
 
 - [ ] **The fields exist.** Open one of those events and check it has the fields
@@ -95,9 +99,11 @@ Take `<technique>` and `<atomic_guid>` from the rule's `simulation` entry.
 ### Run it and check
 
 - [ ] Note the time, then run the atomic:
-      `Invoke-AtomicTest <technique> -TestGuids <atomic_guid>`
-- [ ] Clean up: `Invoke-AtomicTest <technique> -TestGuids <atomic_guid> -Cleanup`.
-      Remove anything the atomic left that its cleanup doesn't cover.
+      `Invoke-AtomicTest <technique> -TestGuids <atomic_guid>`, or follow a
+      manual entry's `steps`.
+- [ ] Clean up: `Invoke-AtomicTest <technique> -TestGuids <atomic_guid> -Cleanup`,
+      or the cleanup in the `steps`. Remove anything the run left that its
+      cleanup doesn't cover.
 - [ ] Wait at least one rule interval (5 minutes) plus ingest delay. Then look in
       Security → Alerts for `SIGMA - <rule title>`.
 - [ ] **It fired:** go to [Record the validation](#record-the-validation).
