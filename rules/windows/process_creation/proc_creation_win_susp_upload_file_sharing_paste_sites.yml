@@ -1,0 +1,87 @@
+title: Suspicious File Upload to File Sharing or Paste Site via Curl or PowerShell
+id: 7635faf9-e872-4ac9-b8e4-93294c319014
+related:
+    - id: e328cc73-f92a-42fb-b3fa-7c2cffda981a
+      type: derived
+status: experimental
+description: |
+    Detects curl or PowerShell sending data to a file sharing or paste site, such as pastebin, file.io, transfer.sh or 0x0.st: curl with an upload option (a form field, --upload-file or -T, --data or -d, or a POST), or PowerShell's Invoke-RestMethod, Invoke-WebRequest or WebClient posting or uploading, with one of the services' domains on the command line.
+    These services take anonymous uploads and hand back a link, so attackers use them to move stolen files out without infrastructure of their own.
+    Derived from SigmaHQ's curl rule. Its case-sensitive regex for curl's short options is written here as plain values, because regex converts with a different meaning on Elastic, so -D (save headers) also matches as -d. It's extended to PowerShell, which the pastebin atomic uses.
+license: DRL-1.1
+references:
+    - https://unit42.paloaltonetworks.com/advanced-backdoor-squidoor/
+    - https://github.com/redcanaryco/atomic-red-team/blob/388942adbd9641f4dfdcf079d7efe9a75ec0ac43/atomics/T1567.003/T1567.003.yaml
+    - https://github.com/redcanaryco/atomic-red-team/blob/388942adbd9641f4dfdcf079d7efe9a75ec0ac43/atomics/T1048.002/T1048.002.yaml
+    - https://github.com/SigmaHQ/sigma/blob/e3f466211866e92553d8389d621ed13cfed5523d/rules/windows/process_creation/proc_creation_win_curl_upload_file_sharing_websites.yml
+author: Swachchhanda Shrawan Poudel (Nextron Systems), cyberchup
+date: 2026-10-20
+tags:
+    - attack.exfiltration
+    - attack.t1567.002
+    - attack.t1567.003
+logsource:
+    category: process_creation
+    product: windows
+    definition: 'Requirements: Sysmon EID 1 or Security 4688 with command-line auditing'
+detection:
+    selection_domain:
+        CommandLine|contains:
+            - '0x0.st'
+            - 'bashupload.com'
+            - 'chunk.io'
+            - 'file.io'
+            - 'filebin.net'
+            - 'pastebin'
+            - 'send.firefox.com'
+            - 'temp.sh'
+            - 'transfer.sh'
+            - 'ufile.io'
+            - 'uploadfiles.io'
+            - 'wetransfer.com'
+            - 'x0.at'
+    selection_curl_img:
+        - Image|endswith: '\curl.exe'
+        - OriginalFileName: 'curl.exe'
+    selection_curl_upload:
+        CommandLine|contains:
+            - ' --form'
+            - ' --upload-file'
+            - ' --data'
+            - ' -X POST'
+            - ' --request POST'
+            - ' -T '
+            - ' -sT '
+            - ' -d '
+            - '=@'
+            - '=<'
+    selection_powershell_img:
+        - Image|endswith:
+              - '\powershell.exe'
+              - '\pwsh.exe'
+        - OriginalFileName:
+              - 'PowerShell.EXE'
+              - 'pwsh.dll'
+    selection_powershell_upload:
+        CommandLine|contains:
+            - '-Method Post'
+            - '-Method "Post"'
+            - "-Method 'Post'"
+            - '-InFile '
+            - '-Form '
+            - '.UploadFile('
+            - '.UploadString('
+    condition: selection_domain and (all of selection_curl_* or all of selection_powershell_*)
+falsepositives:
+    - Administrators or developers uploading files to these services on purpose
+level: high
+regression_tests_path: regression_data/rules/windows/process_creation/proc_creation_win_susp_upload_file_sharing_paste_sites/info.yml
+simulation:
+    - type: atomic-red-team
+      name: Exfiltrate data with HTTP POST to text storage sites - pastebin.com (Windows)
+      technique: T1567.003
+      atomic_guid: c2e8ab6e-431e-460a-a2aa-3bc6a32022e3
+    - type: atomic-red-team
+      name: Exfiltrate data HTTPS using curl windows
+      technique: T1048.002
+      atomic_guid: 1cdf2fb0-51b6-4fd8-96af-77020d5f1bf0
