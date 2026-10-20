@@ -1,0 +1,59 @@
+title: PUA - Suspicious Rclone Copy, Move or Sync to Remote Storage
+id: 0e478610-a1a4-4c08-bbe3-53a5163aa979
+related:
+    - id: e37db05d-d1f9-49c8-b464-cee1a4b11638
+      type: derived
+status: experimental
+description: |
+    Detects rclone copying, moving or syncing files, the commands that send data to a remote. Rclone talks to dozens of cloud storage services (Mega, S3, Google Drive, Dropbox, pCloud) and to FTP and SFTP servers, and ransomware crews such as REvil and Conti use it to steal data before they encrypt it.
+    Derived from SigmaHQ's PUA - Rclone Execution rule. That rule's keywords include short strings such as "ls" and "user", which occur in most paths, so it matches nearly any rclone command line. This version matches only the transfer commands, plus SigmaHQ's set of options that gives away a renamed rclone.
+license: DRL-1.1
+references:
+    - https://research.nccgroup.com/2021/05/27/detecting-rclone-an-effective-tool-for-exfiltration/
+    - https://thedfirreport.com/2021/03/29/sodinokibi-aka-revil-ransomware
+    - https://us-cert.cisa.gov/ncas/analysis-reports/ar21-126a
+    - https://rclone.org/commands/
+    - https://github.com/redcanaryco/atomic-red-team/blob/388942adbd9641f4dfdcf079d7efe9a75ec0ac43/atomics/T1567.002/T1567.002.yaml
+    - https://github.com/SigmaHQ/sigma/blob/e3f466211866e92553d8389d621ed13cfed5523d/rules/windows/process_creation/proc_creation_win_pua_rclone_execution.yml
+author: Bhabesh Raj, Sittikorn S, Aaron Greetham (@beardofbinary) - NCC Group, cyberchup
+date: 2026-10-20
+tags:
+    - attack.exfiltration
+    - attack.t1567.002
+    - attack.t1048.003
+logsource:
+    category: process_creation
+    product: windows
+    definition: 'Requirements: Sysmon EID 1 or Security 4688 with command-line auditing'
+detection:
+    selection_specific_options:
+        CommandLine|contains|all:
+            - '--config '
+            - '--no-check-certificate '
+            - ' copy '
+    selection_rclone_img:
+        - Image|endswith: '\rclone.exe'
+        - Description: 'Rsync for cloud storage'
+    selection_rclone_cli:
+        CommandLine|contains:
+            - ' copy '
+            - ' copyto '
+            - ' move '
+            - ' moveto '
+            - ' sync '
+            - ' bisync '
+    condition: selection_specific_options or all of selection_rclone_*
+falsepositives:
+    - Administrators and backup jobs that use rclone to copy data to sanctioned cloud storage
+    - Copies between two local folders, which rclone also does
+level: high
+regression_tests_path: regression_data/rules/windows/process_creation/proc_creation_win_pua_rclone_remote_transfer/info.yml
+simulation:
+    - type: atomic-red-team
+      name: Exfiltrate data with rclone to cloud Storage - Mega (Windows)
+      technique: T1567.002
+      atomic_guid: 8529ee44-279a-4a19-80bf-b846a40dda58
+    - type: atomic-red-team
+      name: Exfiltration Over Alternative Protocol - FTP - Rclone
+      technique: T1048.003
+      atomic_guid: b854eb97-bf9b-45ab-a1b5-b94e4880c56b
