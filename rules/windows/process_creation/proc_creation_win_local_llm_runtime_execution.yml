@@ -1,0 +1,51 @@
+title: Local LLM Runtime Execution
+id: 4aae9c1b-ec21-40b9-843f-302b0670fadf
+status: experimental
+description: |
+    Detects a local large language model runtime starting on an endpoint: the Ollama server (ollama serve), llama.cpp's llama-server, the LM Studio server (lms server start), or any program loading a GGUF model file, the format these runtimes use.
+    A local model answers without any traffic to an AI provider, so it sidesteps the proxy and data loss controls that watch for AI services. Malware can use one too: the PromptLock ransomware prototype (2025) generated its Lua scripts with a gpt-oss model through the Ollama API.
+    On its own this is usually unsanctioned AI use rather than an attack. It's meant for hunting and for correlating with other alerts on the same host.
+references:
+    - https://docs.ollama.com/windows
+    - https://github.com/ggml-org/llama.cpp/blob/39da130fcd1b6ca47d3c0522a40eccff41ea3dfb/tools/server/README.md
+    - https://lmstudio.ai/docs/cli/server-start
+    - https://thehackernews.com/2025/08/someone-created-first-ai-powered.html
+author: cyberchup
+date: 2026-10-20
+tags:
+    - attack.resource-development
+    - attack.t1588.007
+logsource:
+    category: process_creation
+    product: windows
+    definition: 'Requirements: Sysmon EID 1 or Security 4688 with command-line auditing'
+detection:
+    selection_ollama:
+        Image|endswith: '\ollama.exe'
+        CommandLine|contains: ' serve'
+    selection_llama_cpp:
+        Image|endswith: '\llama-server.exe'
+    selection_lm_studio:
+        Image|endswith: '\lms.exe'
+        CommandLine|contains: 'server start'
+    selection_model_file:
+        CommandLine|contains: '.gguf'
+    condition: 1 of selection_*
+falsepositives:
+    - Developers and data scientists running local models
+    - Desktop AI apps that start a bundled runtime, such as Ollama's tray app or LM Studio
+    - Tools that download or convert GGUF model files without running them
+level: low
+regression_tests_path: regression_data/rules/windows/process_creation/proc_creation_win_local_llm_runtime_execution/info.yml
+simulation:
+    - type: manual
+      name: Start a local Ollama server
+      technique: T1588.007
+      reason: Atomic Red Team has no test that runs a local LLM runtime (checked 2026-10-20).
+      steps: |
+          On ws01.hauslab.local, signed in as HAUSLAB\labuser:
+          1. Install Ollama: winget install --id Ollama.Ollama
+             The installer starts Ollama's tray app, which starts ollama.exe serve.
+          2. If the server isn't running, quit the tray app and run: ollama serve
+             No model needs to be downloaded: the rule matches the server's process start.
+          3. Clean up: quit Ollama, then winget uninstall --id Ollama.Ollama
