@@ -154,6 +154,12 @@ For anything not listed, use the prefix in `sigmahq_filename.json`.
 Fields appear in this order. Formatting: 4-space indentation, single-quoted
 strings, UTF-8, LF line endings.
 
+Start every rule from the annotated template,
+[templates/rule.yml](templates/rule.yml). `python tests/new_rule.py <rule path>`
+copies it with a fresh id and creates the rule's test folder
+([templates/README.md](templates/README.md)). CI fails a rule or `info.yml`
+that still has one of the templates' `<placeholders>`.
+
 ```yaml
 title: Potential Example Behavior Via Example.exe   # Title Case; wording matches level
 id: <random UUIDv4>
@@ -162,6 +168,7 @@ related:                                            # optional
       type: derived                                 # derived | obsolete | merged | renamed | similar
 status: experimental
 description: Detects <behavior> by <how it is observed>. <Why it matters.>
+license: DRL-1.1                                    # only for rules derived from SigmaHQ (section 8)
 references:
     - <public URL; GitHub links pinned to a commit>
 author: <public name or handle>

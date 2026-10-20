@@ -47,17 +47,24 @@ git switch -c rule/<rule file name without .yml>
 
 ## 3. Write the rule
 
-- Folder, file name and field order follow CONVENTIONS.md, sections 1 to 3.
-- Start at `status: experimental` with a fresh id:
-  `python -c "import uuid; print(uuid.uuid4())"`.
+- Folder and file name follow CONVENTIONS.md, sections 1 and 2.
+- Start from the template ([templates/README.md](templates/README.md)):
+
+  ```text
+  python tests/new_rule.py rules/<product>/<category>/<file name>.yml --title "<title>"
+  ```
+
+  It creates the rule at `status: experimental` with a fresh id, and the test folder
+  for step 4. Replace every `<placeholder>` it leaves.
 - Use current ATT&CK tags (v19) and add the `simulation` entry for the atomic, or
   the manual entry.
 
 ## 4. Write the tests
 
-- Create `regression_data/<rule path without .yml>/` with `info.yml`, the
-  true-positive events (`<rule id>.jsonl`) and the benign events
-  (`<rule id>_benign.jsonl`). The format is in CONVENTIONS.md, section 4, under
+- The scaffold has created `regression_data/<rule path without .yml>/` with
+  `info.yml` and two empty sample files: true-positive events go in
+  `<rule id>.jsonl` and benign events in `<rule id>_benign.jsonl`. Set each test's
+  `match_count`. The format is in CONVENTIONS.md, section 4, under
   `regression_tests_path`.
 - Synthetic events use Sigma field names and hauslab.local values only.
 - Make the benign events near misses: the same tool doing something legitimate, or

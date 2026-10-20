@@ -1,0 +1,103 @@
+# Sigma rule template for wachhund (https://github.com/cyberchup/wachhund).
+#
+# Start a rule with the scaffold. It copies this template without its comments, fills in
+# the ids, date, author, test paths and, where the folder says, the logsource, and creates
+# the test files:
+#
+#     python tests/new_rule.py rules/windows/process_creation/proc_creation_win_<subject>_<behavior>.yml --title "Potential <Short Behavior> Via <Tool Name>"
+#
+# Then replace every <placeholder> that's left; CI fails a rule that still has one. The
+# fields, their order and their formatting (4-space indents, single-quoted strings) follow
+# CONVENTIONS.md, section 3. templates/README.md explains what each field is for.
+#
+# Everything here is standard Sigma (specification v2.1.0) or one of SigmaHQ's own fields,
+# so a rule written from this template converts with sigma-cli to any backend: Splunk,
+# Elastic, Microsoft Sentinel and Defender XDR, QRadar and others.
+
+# Title Case, keyword style, one line of at most 120 characters, no "Detects" and no final
+# period. The wording follows `level`: neutral for informational and low, "Potential ..."
+# for medium, "Suspicious ..." for high, and the exact threat for critical.
+title: Potential <Short Behavior> Via <Tool Name>
+# A fresh random UUIDv4. Never reuse or edit one.
+id: <random UUIDv4>
+# Only for a rule adapted from another rule (SigmaHQ's, say) or one that replaces rules:
+# their ids, each with derived, obsolete, merged, renamed or similar. Delete it otherwise.
+related:
+    - id: <UUID of the related rule>
+      type: derived
+# experimental until the maintainer confirms the rule fired in hauslab. Never promoted by
+# age (CONVENTIONS.md, section 6).
+status: experimental
+# Starts with "Detects". Say how the behavior shows up in the logs and why it matters.
+# No URLs: they go in references.
+description: |
+    Detects <the behavior> by <what the logs show>.
+    <Why it matters: what an attacker gains, and which tools or threat actors do this.>
+# Only for a rule derived from a SigmaHQ rule, which the Detection Rule License covers.
+# Delete it otherwise.
+license: DRL-1.1
+# Public sources only. GitHub links are permalinks pinned to a commit. ATT&CK goes in tags,
+# not here.
+references:
+    - <public URL>
+# Public names or handles, separated by commas. A derived rule keeps its upstream authors
+# first.
+author: <public name or handle>
+date: <YYYY-MM-DD>
+# Current ATT&CK (v19) tags: the tag for every tactic ATT&CK lists under the technique,
+# then the technique.
+tags:
+    - attack.<tactic short name>
+    - attack.<technique id, such as t1059.001>
+# Lowercase values. A generic category (process_creation) where one exists; Windows event
+# log channels use service (security, system, ...) instead, and firewall rules use category
+# firewall with no product (CONVENTIONS.md, section 1).
+logsource:
+    category: <category, such as process_creation>
+    product: <product, such as windows>
+    # The telemetry or audit settings the rule needs, so whoever deploys it can check for
+    # them first.
+    definition: 'Requirements: <telemetry or audit settings the rule needs>'
+# Sigma field names (Image, CommandLine, ...), never a platform's own (process.command_line,
+# ProcessCommandLine): mapping them is the pipelines' job. Write plain values, exact or with
+# contains, startswith or endswith. Regex and wildcards inside a value convert into queries
+# that match differently on Elastic or Kusto, so CI fails them.
+detection:
+    # selection_* blocks, so the condition can say "all of selection_*". The OriginalFileName
+    # line also catches a renamed copy of the binary.
+    selection_img:
+        - Image|endswith: '\<binary name>.exe'
+        - OriginalFileName: '<original file name>'
+    selection_cli:
+        CommandLine|contains:
+            - '<suspicious value>'
+            - '<another suspicious value>'
+    # filter_main_* excludes default OS behavior, or what the rule's logic needs;
+    # filter_optional_* excludes common third-party software. Never one environment's hosts,
+    # accounts or tools: that tuning stays outside this repo.
+    filter_main_<what it excludes>:
+        ParentImage|endswith: '\<expected parent>.exe'
+    condition: all of selection_* and not 1 of filter_main_*
+# Specific and capitalized, in general terms. Unknown if you don't know of any, Unlikely if
+# you don't expect any. Never None, Pentest or Red Team.
+falsepositives:
+    - <Legitimate activity that also matches, in general terms>
+# informational, low, medium, high or critical, matching the title's wording.
+level: medium
+# The rule's tests: true-positive and benign sample events. The folder mirrors the rule's
+# path. SigmaHQ's field; required here.
+regression_tests_path: regression_data/<rule path without .yml>/info.yml
+# How to make the rule fire in a lab: the Atomic Red Team test it was written against.
+# SigmaHQ's field; required here.
+simulation:
+    - type: atomic-red-team
+      name: <the atomic's name, exactly>
+      technique: <current ATT&CK ID, such as T1059.001>
+      atomic_guid: <the atomic's auto_generated_guid>
+    # When no atomic fits and the maintainer agrees, a manual entry replaces it:
+    # - type: manual
+    #   name: <short name for the procedure>
+    #   technique: <current ATT&CK ID>
+    #   reason: <why no Atomic Red Team test fits>
+    #   steps: |
+    #       <what to run, on which hauslab host, against what target, and how to clean up>

@@ -1,0 +1,36 @@
+# Test definition template for wachhund, in SigmaHQ's info.yml format (CONVENTIONS.md,
+# section 4, under regression_tests_path).
+#
+# tests/new_rule.py copies it, without its comments, to
+# regression_data/<rule path without .yml>/info.yml and creates both sample files empty,
+# so CI fails until the true-positive file has events that match. Samples are JSON Lines,
+# one event per line, with Sigma field names (Image, CommandLine, ...) and hauslab.local
+# values only (CONVENTIONS.md, section 7).
+
+# A fresh random UUIDv4, not the rule's id.
+id: <random UUIDv4>
+# What the samples cover, so a reviewer can tell what each event is there for.
+description: |
+    Positive samples: <what each true-positive event covers>.
+    Benign samples: <the near misses, such as the same tool doing something legitimate>.
+date: <YYYY-MM-DD>
+author: <public name or handle>
+rule_metadata:
+    - id: <the rule's id>
+      title: <the rule's title>
+regression_tests_info:
+    # match_count is exact: how many events in the file must match.
+    - name: Positive Detection Test
+      type: jsonl
+      match_count: 1
+      path: regression_data/<rule path without .yml>/<the rule's id>.jsonl
+    # Near misses. With match_count 0, any match fails the run.
+    - name: Benign Look-alike Test
+      type: jsonl
+      match_count: 0
+      path: regression_data/<rule path without .yml>/<the rule's id>_benign.jsonl
+# Only after the maintainer confirms the rule fired in hauslab, together with a test for the
+# sanitized capture (WORKFLOW.md, step 9):
+# validated:
+#     - platform: elastic
+#       date: <date it fired>
