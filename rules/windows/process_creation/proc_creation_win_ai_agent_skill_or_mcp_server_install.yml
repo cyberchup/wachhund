@@ -1,0 +1,62 @@
+title: Potential AI Agent Skill or MCP Server Installation
+id: 7f2e9e25-26bb-4120-b8b4-77d4dbf45ad8
+related:
+    - id: afa71271-6a97-4e47-810f-83120fb1a4ce
+      type: derived
+status: experimental
+description: |
+    Detects an AI agent being given new capabilities from the command line: agent skills installed with "npx skills add" (for Claude Code, Codex, Cursor, GitHub Copilot and other agents), or a Model Context Protocol (MCP) server added with "claude mcp add", "codex mcp add", "gemini mcp add" or VS Code's "code --add-mcp".
+    Skills and MCP servers feed instructions and tools to the agent, and MCP servers run as programs with the user's rights, so a malicious or hijacked one is a supply-chain path into the agent and everything it can reach. Malicious skills that steal credentials and crypto wallets have been published.
+    Previewing a skill repository with --list installs nothing and is excluded. Review what was installed and where it came from. Where AI agent tooling is allowed this is routine, so tune the rule or lower its level; where it isn't, investigate.
+license: DRL-1.1
+references:
+    - https://blog.lukaszolejnik.com/supply-chain-risk-of-agentic-ai-infecting-infrastructures-via-skill-worms/
+    - https://github.com/vercel-labs/skills/blob/1f7fbc8d0e49c4e0601d364696bd1bdd15e80967/README.md
+    - https://opensourcemalware.com/blog/clawdbot-skills-ganked-your-crypto
+    - https://promptintel.novahunting.ai/molt
+    - https://code.claude.com/docs/en/mcp
+    - https://code.visualstudio.com/docs/agents/reference/mcp-configuration
+    - https://github.com/SigmaHQ/sigma/blob/e3f466211866e92553d8389d621ed13cfed5523d/rules/windows/process_creation/proc_creation_win_node_new_agent_skills_installed.yml
+author: Marco Pedrinazzi (@pedrinazziM) (InTheCyber), cyberchup
+date: 2026-10-20
+tags:
+    - attack.execution
+    - attack.t1059.007
+    - attack.initial-access
+    - attack.t1195.001
+logsource:
+    category: process_creation
+    product: windows
+    definition: 'Requirements: Sysmon EID 1 or Security 4688 with command-line auditing'
+detection:
+    selection_skills_img:
+        - Image|endswith: '\node.exe'
+        - OriginalFileName: 'node.exe'
+    selection_skills_cli:
+        CommandLine|contains|all:
+            - 'npx-cli.js'
+            - 'skills '
+            - ' add '
+    selection_mcp:
+        CommandLine|contains:
+            - ' mcp add'
+            - '--add-mcp'
+    filter_main_skills_preview:
+        CommandLine|contains: ' --list'
+    condition: (all of selection_skills_* or selection_mcp) and not 1 of filter_main_*
+falsepositives:
+    - Developers installing skills or MCP servers they trust, routine where AI agent tooling is allowed
+level: medium
+regression_tests_path: regression_data/rules/windows/process_creation/proc_creation_win_ai_agent_skill_or_mcp_server_install/info.yml
+simulation:
+    - type: manual
+      name: Install an agent skill and add an MCP server
+      technique: T1059.007
+      reason: Atomic Red Team has no test that installs agent skills or MCP servers (checked 2026-10-20).
+      steps: |
+          On ws01.hauslab.local, signed in as HAUSLAB\labuser, with Node.js LTS installed:
+          1. In cmd.exe, in an empty folder such as C:\Users\labuser\agent-test, run: npx skills add vercel-labs/agent-skills --skill frontend-design -a claude-code -y
+          2. Install Claude Code (npm install -g @anthropic-ai/claude-code) and run:
+             claude mcp add --transport http hauslab-test https://mcp.example.com/mcp
+             The server needn't exist: the command only writes the configuration.
+          3. Clean up: claude mcp remove hauslab-test, npx skills remove frontend-design, npm uninstall -g @anthropic-ai/claude-code, then delete the folder.
