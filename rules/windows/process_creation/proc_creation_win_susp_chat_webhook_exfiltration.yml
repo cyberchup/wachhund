@@ -1,0 +1,49 @@
+title: Potential Data Exfiltration via Chat Webhook
+id: b38d87aa-8a4a-4fac-8c9a-67fbc50fe65c
+status: experimental
+description: |
+    Detects a command line that holds the URL of a chat service's incoming webhook: Discord, Slack, Microsoft Teams (Office 365 connectors and the Workflows that replace them), typically PowerShell's Invoke-RestMethod or curl posting to it.
+    A webhook URL needs no other credential and accepts posts from anywhere, and the services' domains are allowed through most proxies, so attackers and malicious packages use them to send out stolen files, credentials and host details.
+    It sees only URLs on a command line. Malware that posts from its own code, as many malicious npm and PyPI packages do, needs a network rule instead.
+references:
+    - https://github.com/redcanaryco/atomic-red-team/blob/388942adbd9641f4dfdcf079d7efe9a75ec0ac43/atomics/T1567.004/T1567.004.yaml
+    - https://discord.com/developers/docs/resources/webhook#execute-webhook
+    - https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook
+    - https://thehackernews.com/2025/10/npm-pypi-and-rubygems-packages-found.html
+author: cyberchup
+date: 2026-10-20
+tags:
+    - attack.exfiltration
+    - attack.t1567.004
+logsource:
+    category: process_creation
+    product: windows
+    definition: 'Requirements: Sysmon EID 1 or Security 4688 with command-line auditing'
+detection:
+    selection_discord_domain:
+        CommandLine|contains:
+            - 'discord.com/api/'
+            - 'discordapp.com/api/'
+    selection_discord_path:
+        CommandLine|contains: '/webhooks/'
+    selection_other:
+        CommandLine|contains:
+            - 'hooks.slack.com/'
+            - '.webhook.office.com/webhookb2/'
+            - 'outlook.office.com/webhook/'
+            - '/triggers/manual/paths/invoke'
+    condition: all of selection_discord_* or selection_other
+falsepositives:
+    - Administrative and monitoring scripts that post alerts to a team's chat channel from the command line or a scheduled task
+    - Other HTTP-triggered Azure Logic Apps and Power Automate flows called from the command line, which share the Teams Workflows URL path
+level: medium
+regression_tests_path: regression_data/rules/windows/process_creation/proc_creation_win_susp_chat_webhook_exfiltration/info.yml
+simulation:
+    - type: atomic-red-team
+      name: Exfiltrate staged data to a Discord webhook (PowerShell)
+      technique: T1567.004
+      atomic_guid: f0057c81-24dc-4a2e-b658-5809c242180b
+    - type: atomic-red-team
+      name: Exfiltrate staged data to a Microsoft Teams webhook (PowerShell)
+      technique: T1567.004
+      atomic_guid: 35ad6590-2207-4b14-bf8f-9899470d7156
