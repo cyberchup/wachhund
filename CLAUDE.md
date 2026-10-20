@@ -10,6 +10,8 @@ source of truth; platform queries are build artifacts.
 
 ## For every Sigma rule you write or review
 
+- Start it from the template: `python tests/new_rule.py <rule path> --title "..."`
+  (see [templates/README.md](templates/README.md)).
 - Follow SigmaHQ naming, folder, and metadata conventions (see
   [CONVENTIONS.md](CONVENTIONS.md)).
 - Include UUID, status, ATT&CK tags, false positives, and level.

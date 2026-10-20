@@ -3,8 +3,9 @@
 Per rule: ATT&CK tactic and technique tags, the `simulation` entry (an Atomic Red Team
 test, or a manual procedure when no atomic fits), true-positive and benign tests in
 SigmaHQ's info.yml format, the status gate (`test` or `stable` needs a recorded hauslab
-validation), folder placement, one-line title, author and license, and public-repo hygiene
-in the rule, its info.yml and its samples. Across the repo: duplicate rule ids, test data
+validation), folder placement, one-line title, author and license, placeholders left from
+the templates in templates/, and public-repo hygiene in the rule, its info.yml and its
+samples. Across the repo: duplicate rule ids, test data
 that no rule points to, and public-repo hygiene in pipelines/.
 
 With --online, each Atomic Red Team entry is also checked against the Atomic Red Team repo.
@@ -42,6 +43,12 @@ MANUAL_KEYS = {"reason": "why no Atomic Red Team test fits", "steps": "how to pr
 # Rule fields the build copies into comments in the converted queries (CONVENTIONS.md, section 8).
 COMMENT_FIELDS = ("title", "author", "license")
 
+# The rule and test templates. tests/new_rule.py copies them and leaves their <placeholders>
+# for the author to fill in. Only the templates' own placeholders count, and they're phrases,
+# because rules hold text such as <USER> or <name> legitimately.
+TEMPLATE_FILES = ("templates/rule.yml", "templates/info.yml")
+PLACEHOLDER = re.compile(r"<[^<>\n]+>")
+
 # Public-repo hygiene (CONVENTIONS.md, section 7).
 ALLOWED_DOMAINS = ("hauslab.local", "example.com", "example.net", "example.org")
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})")
@@ -63,23 +70,40 @@ TENANT_KEY = re.compile(r"tenant|subscription", re.IGNORECASE)
 GUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
 
 
-def check_rule(path: Path, root: Path, online: bool, atomics: dict) -> list[str]:
+def check_rule(path: Path, root: Path, online: bool, atomics: dict, placeholders: frozenset[str] = frozenset()) -> list[str]:
     data = load_yaml(path)
     if not isinstance(data, dict):
         return ["not a YAML mapping"]
     tags = [str(tag) for tag in data.get("tags") or []]
-    problems = []
+    problems = check_placeholders(data, placeholders)
     if not any(TACTIC_TAG.match(tag) for tag in tags):
         problems.append("needs an ATT&CK tactic tag (attack.<tactic>)")
     if not any(TECHNIQUE_TAG.match(tag) for tag in tags):
         problems.append("needs an ATT&CK technique tag (attack.tNNNN or attack.tNNNN.NNN)")
     problems += check_simulation(data.get("simulation"), online, atomics)
     problems += check_folder(path, data, root)
-    problems += check_tests(path, data, root)
+    problems += check_tests(path, data, root, placeholders)
     problems += check_comment_fields(data)
     rule_text = {key: value for key, value in data.items() if key != "references"}
     problems += [f"rule: {problem}" for problem in hygiene(rule_text, strict=False)]
     return problems
+
+
+def template_placeholders(root: Path) -> frozenset[str]:
+    """Every <placeholder> in the templates' keys and values (not their comments)."""
+    found = set()
+    for name in TEMPLATE_FILES:
+        if (root / name).is_file():
+            for text in _texts(load_yaml(root / name)):
+                found.update(PLACEHOLDER.findall(text))
+    return frozenset(found)
+
+
+def check_placeholders(node: Any, placeholders: frozenset[str]) -> list[str]:
+    left = [found for text in _texts(node) for found in PLACEHOLDER.findall(text) if found in placeholders]
+    if not left:
+        return []
+    return [f"still has template placeholders to fill in: {', '.join(dict.fromkeys(left))}"]
 
 
 def check_comment_fields(data: dict) -> list[str]:
@@ -146,7 +170,7 @@ def check_folder(path: Path, data: dict, root: Path) -> list[str]:
     return []
 
 
-def check_tests(path: Path, data: dict, root: Path) -> list[str]:
+def check_tests(path: Path, data: dict, root: Path, placeholders: frozenset[str] = frozenset()) -> list[str]:
     rule_id = str(data.get("id", ""))
     expected_info = Path("regression_data") / path.relative_to(root).with_suffix("") / "info.yml"
     info_path = data.get("regression_tests_path")
@@ -161,6 +185,7 @@ def check_tests(path: Path, data: dict, root: Path) -> list[str]:
     info = load_yaml(root / info_path) or {}
     # The raw text, so comments are checked too.
     problems += [f"info.yml: {problem}" for problem in hygiene((root / info_path).read_text(encoding="utf-8"), strict=True)]
+    problems += [f"info.yml: {problem}" for problem in check_placeholders(info, placeholders)]
     metadata = info.get("rule_metadata") or [{}]
     if not isinstance(metadata[0], dict) or str(metadata[0].get("id")) != rule_id:
         problems.append("info.yml: rule_metadata[0].id must equal the rule id")
@@ -265,6 +290,19 @@ def _account_domain_problem(domain: str) -> str | None:
     return f"domain {domain!r}: use HAUSLAB, a built-in Windows name such as NT AUTHORITY, or a generic host name such as ws01"
 
 
+def _texts(node: Any) -> Iterator[str]:
+    """Every string in a YAML document, keys included (detection block names, say)."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            yield str(key)
+            yield from _texts(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _texts(value)
+    elif isinstance(node, str):
+        yield node
+
+
 def _strings(node: Any, key: str = "") -> Iterator[tuple[str, str]]:
     if isinstance(node, dict):
         for child_key, value in node.items():
@@ -279,8 +317,9 @@ def _strings(node: Any, key: str = "") -> Iterator[tuple[str, str]]:
 def run(root: Path = ROOT, online: bool = False) -> dict[str, list[str]]:
     findings: dict[str, list[str]] = defaultdict(list)
     atomics: dict = {}
+    placeholders = template_placeholders(root)
     for path in iter_rule_files(root):
-        findings[rel(path, root)] += check_rule(path, root, online, atomics)
+        findings[rel(path, root)] += check_rule(path, root, online, atomics, placeholders)
 
     ids = defaultdict(list)
     referenced = set()

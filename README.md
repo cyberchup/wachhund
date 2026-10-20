@@ -25,16 +25,18 @@ rule on each pull request and never commits the output.
 | --- | --- |
 | `rules/` | Sigma rules, in SigmaHQ's folder layout |
 | `regression_data/` | True-positive and benign test events for each rule |
+| `templates/` | The rule and test templates every rule starts from |
 | `pipelines/` | Conversion targets and field mappings for each platform |
-| `tests/` | The checks CI runs, including conversion and regression tests |
+| `tests/` | The checks CI runs, including conversion and regression tests, and the `new_rule.py` scaffold |
 | `requirements.in`, `requirements.txt` | The tooling's pinned dependencies, and the hashed lock CI installs |
 
 ## How a rule gets here
 
-Every rule follows SigmaHQ's conventions and is paired with an Atomic Red Team test
-(or, where none fits, a written lab procedure) plus true-positive and benign sample
-events. [CONVENTIONS.md](CONVENTIONS.md) sets
-out what a rule must contain. [WORKFLOW.md](WORKFLOW.md) covers the path from branch
+Every rule starts from the same [template](templates/README.md), follows SigmaHQ's
+conventions and is paired with an Atomic Red Team test (or, where none fits, a written
+lab procedure) plus true-positive and benign sample events. The template is plain Sigma,
+so it also works for writing rules outside this repo, for any platform Sigma converts
+to. [CONVENTIONS.md](CONVENTIONS.md) sets out what a rule must contain. [WORKFLOW.md](WORKFLOW.md) covers the path from branch
 to pull request to hauslab, and [TESTING.md](TESTING.md) is the checklist for testing
 a rule, both automatically and live in hauslab.
 
