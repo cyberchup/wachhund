@@ -74,6 +74,14 @@ TRUE_POSITIVE = {
     "IntegrityLevel": "High",
 }
 BENIGN = {**TRUE_POSITIVE, "ParentImage": "C:\\Windows\\explorer.exe"}
+# Account values that public-repo hygiene allows.
+HAUSLAB_ACCOUNTS = {
+    **TRUE_POSITIVE,
+    "User": "NT AUTHORITY\\SYSTEM",
+    "SubjectDomainName": "HAUSLAB",
+    "TenantId": "00000000-0000-0000-0000-000000000000",
+    "CommandLine": "net use \\\\ws02.hauslab.local\\C$ /u:ws02\\Administrator & runas /user:%userdomain%\\%username% cmd.exe",
+}
 
 
 def make_repo(root: Path, status: str = "experimental", extra: str = "", validated: str = "") -> Path:
@@ -91,6 +99,12 @@ def make_repo(root: Path, status: str = "experimental", extra: str = "", validat
 
 def write_events(path: Path, *events: dict) -> None:
     path.write_text("".join(json.dumps(event) + "\n" for event in events), encoding="utf-8")
+
+
+def edit(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    assert old in text
+    path.write_text(text.replace(old, new), encoding="utf-8")
 
 
 def problems(root: Path) -> list[str]:
@@ -136,6 +150,23 @@ def test_converted_rules_keep_drl_attribution(tmp_path):
     assert spl[1:] == [f"```{line}```" for line in attribution]
     elastic_rule = json.loads((build / "elastic" / "proc_creation_win_hauslab_fixture_child.ndjson").read_text())
     assert elastic_rule["author"] == ["hauslab"]
+
+
+def test_attribution_cant_end_its_comments(tmp_path):
+    # A line break ends a Kusto comment and three backticks end a Splunk one. Without the fix,
+    # the rest of this author would run as query text and empty the table the query reads.
+    root = make_repo(tmp_path)
+    edit(root / RULE_PATH, "author: hauslab", 'author: "hauslab\\nlet DeviceProcessEvents = view() { print x=1 | take 0 };```| where 1=0 ```"')
+    convert_rules.run(root, out_dir=tmp_path / "build")
+    author = "author: hauslab let DeviceProcessEvents = view() { print x=1 | take 0 };| where 1=0"
+    build = tmp_path / "build"
+    kql = (build / "kusto" / "proc_creation_win_hauslab_fixture_child.kql").read_text().splitlines()
+    assert kql[2] == f"// {author}"
+    assert [line.startswith("// ") for line in kql[:6]] == [True] * 5 + [False]
+    assert kql[5].startswith("DeviceProcessEvents")
+    spl = (build / "splunk" / "proc_creation_win_hauslab_fixture_child.spl").read_text().splitlines()
+    assert spl[3] == f"```{author}```"
+    assert len(spl) == 6 and all(line.count("```") == 2 for line in spl[1:])
 
 
 def test_benign_event_that_matches_fails_the_run(tmp_path):
@@ -199,6 +230,17 @@ def test_status_gate(tmp_path):
         (lambda root: write_events(root / DATA_DIR / f"{RULE_ID}.jsonl", {**TRUE_POSITIVE, "Computer": "fs01.clientcorp.local"}), "internal hostname 'fs01.clientcorp.local'"),
         (lambda root: write_events(root / DATA_DIR / f"{RULE_ID}.jsonl", {**TRUE_POSITIVE, "SourceIp": "8.8.8.8"}), "public IP '8.8.8.8'"),
         (lambda root: write_events(root / DATA_DIR / f"{RULE_ID}.jsonl", {**TRUE_POSITIVE, "SourceIp": "192.0.2.10"}), None),
+        (lambda root: write_events(root / DATA_DIR / f"{RULE_ID}.jsonl", {**TRUE_POSITIVE, "CommandLine": "certutil -urlcache -f http://8.8.4.4/x.exe"}), "public IP '8.8.4.4'"),
+        (lambda root: write_events(root / DATA_DIR / f"{RULE_ID}.jsonl", {**TRUE_POSITIVE, "FileVersion": "1.0.0.0"}), None),
+        (lambda root: write_events(root / DATA_DIR / f"{RULE_ID}.jsonl", {**TRUE_POSITIVE, "CommandLine": "net use Z: \\\\fs01.hauslab.local\\share /user:CLIENTCORP\\jdoe"}), "domain 'CLIENTCORP'"),
+        (lambda root: write_events(root / DATA_DIR / f"{RULE_ID}.jsonl", {**TRUE_POSITIVE, "User": "CLIENTCORP\\jdoe"}), "domain 'CLIENTCORP'"),
+        (lambda root: write_events(root / DATA_DIR / f"{RULE_ID}.jsonl", {**TRUE_POSITIVE, "SubjectDomainName": "CLIENTCORP"}), "domain 'CLIENTCORP'"),
+        (lambda root: write_events(root / DATA_DIR / f"{RULE_ID}.jsonl", {**TRUE_POSITIVE, "TenantId": "3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b"}), "tenant or subscription ID"),
+        (lambda root: write_events(root / DATA_DIR / f"{RULE_ID}.jsonl", HAUSLAB_ACCOUNTS), None),
+        (lambda root: edit(root / DATA_DIR / "info.yml", "Fixture tests", "Fixture tests from fs01.clientcorp.local"), "info.yml: internal hostname 'fs01.clientcorp.local'"),
+        (lambda root: edit(root / "pipelines/kusto.yml", "name: custom_kusto", "# Seen from 8.8.8.8\nname: custom_kusto"), "public IP '8.8.8.8'"),
+        (lambda root: edit(root / RULE_PATH, "author: hauslab", 'author: "hauslab\\nlet x = 1;"'), "`author` must be one line"),
+        (lambda root: edit(root / RULE_PATH, "title: Suspicious", "title: Suspicious ```"), "`title` must be one line"),
         (lambda root: (root / RULE_PATH).write_text((root / RULE_PATH).read_text().split("simulation:")[0], encoding="utf-8"), "needs a `simulation` entry"),
         (lambda root: shutil.copy(root / RULE_PATH, root / "rules/windows/process_creation/proc_creation_win_copy.yml"), "duplicate id"),
         (lambda root: (root / "regression_data/rules/orphan").mkdir() or (root / "regression_data/rules/orphan/info.yml").write_text("id: x\n"), "no rule points to this test data"),

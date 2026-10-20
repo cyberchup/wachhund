@@ -215,6 +215,10 @@ simulation:                                         # or type: manual, see secti
   containing `.`, `/`, or `_` may also be lowercase (`cmd.exe`).
 - 120 characters at most. Don't start with "Detect" or "Detects", and don't
   end with a period. Use keyword style, not a sentence.
+- **Repo rule:** one line, with no backticks. The build copies the title into
+  comments in the converted queries
+  ([section 8](#8-rules-derived-from-sigmahq)), where a line break or backticks
+  would end the comment.
 - Optional structure: `Prefix - Main Title - Suffix`. The prefix names a
   category or actor (`HackTool - `, `PUA - `). The suffix tells apart the same
   logic on different log sources (`- PowerShell`, `- Security`).
@@ -257,6 +261,8 @@ See [Status lifecycle](#6-status-lifecycle).
 
 A public name or handle. Separate multiple authors with commas. Keep upstream
 authors on derived rules ([section 8](#8-rules-derived-from-sigmahq)).
+**Repo rule:** one line, with no backticks, as for `title`. The same applies to
+`license`.
 
 ### date and modified
 
@@ -499,14 +505,33 @@ comments, commit messages, and pull request text.
   environment-specific exclusions.
 - Example values come from hauslab only: hosts such as `ws01.hauslab.local` and
   `dc01.hauslab.local`, accounts such as `labuser@hauslab.local` and
-  `HAUSLAB\labuser`.
+  `HAUSLAB\labuser`. A local account takes the host's short name
+  (`ws02\Administrator`); built-in Windows names such as `NT AUTHORITY\SYSTEM`
+  are fine.
 - For external values (attacker IPs, C2 domains), use reserved documentation
   values: IPs in `192.0.2.0/24`, `198.51.100.0/24`, or `203.0.113.0/24`
   (RFC 5737), and domains under `example.com` (RFC 2606).
 - Sanitize hauslab captures before committing. Replace SIDs, GUIDs, device IDs,
-  tenant and subscription IDs, and public IPs with obviously fake values.
+  tenant and subscription IDs, and public IPs with obviously fake values. A
+  tenant or subscription ID becomes `00000000-0000-0000-0000-000000000000`.
 - Tuning for a particular environment never goes in a rule. Keep it outside
   this repo, in a private Sigma filter or a platform exception.
+
+`tests/check_rules.py` checks rules, `info.yml` files, sample events and
+`pipelines/` for the common shapes of client data:
+
+- Email addresses and internal hostnames (`.local`, `.corp`, `.lan`, ...)
+  outside hauslab.local and example.com.
+- Accounts whose domain or computer isn't `HAUSLAB`, a built-in Windows name or
+  a generic host name such as `ws02`, both in user and domain fields and after
+  switches such as `/user:`.
+- Tenant and subscription IDs other than all zeros.
+- Public IPs anywhere in sample events, `info.yml` and `pipelines/`. Rules may
+  hold public IPs as IOCs, so they aren't checked for these, or for the values of
+  domain fields.
+
+It's a heuristic and misses other shapes, so still read what you commit. Git
+history keeps whatever was pushed, even after a later commit removes it.
 
 ## 8. Rules derived from SigmaHQ
 
@@ -524,7 +549,9 @@ requires attribution. When you adapt one:
   have `author` and `license` fields. `.kql` files start, and `.spl` files end,
   with comment lines giving the rule's title, id, authors, license and URL
   (`tests/convert_rules.py`, configured in `pipelines/targets.yml`). Keep those
-  lines when you deploy a query.
+  lines when you deploy a query. The build writes each value on one line and
+  drops backticks, so nothing in a rule's metadata can end a comment and run as
+  part of the query.
 
 ## 9. Tests and CI
 
@@ -534,7 +561,7 @@ problem:
 
 | Step | Fails when |
 | --- | --- |
-| `pytest -q tests/unit` | the repo's own scripts misbehave |
+| `pytest -q tests/unit` | the repo's own scripts misbehave, or `requirements.txt` pins a direct dependency differently from `requirements.in` |
 | `yamllint --strict .` | YAML formatting breaks section 3, including CRLF line endings |
 | `sigma check ... rules*` | any pySigma or SigmaHQ validator reports an issue (all validators are on, a superset of SigmaHQ's set) |
 | `python tests/check_rules.py --online` | a rule breaks a **Repo rule** in this file |
@@ -655,6 +682,24 @@ python tests/regression_tests_runner.py
 
 Set your editor to LF line endings. `.gitattributes` converts files on commit,
 but yamllint checks the working copy.
+
+Dependencies:
+
+- `requirements.in` pins the tooling's direct dependencies. `requirements.txt`
+  is generated from it and pins every package they pull in, with hashes, for
+  Linux, macOS and Windows on Python 3.10 and later. CI installs it with
+  `--require-hashes`, so a download that doesn't match its hash fails the
+  install. A unit test fails when the two files pin a direct dependency
+  differently.
+- To change a pin, edit `requirements.in`, then regenerate `requirements.txt`
+  with [uv](https://docs.astral.sh/uv/), using the command at the top of that
+  file. Set `--exclude-newer` to a date about two weeks back, so a release
+  that's only days old (the window in which a hijacked release is usually
+  caught) doesn't get in.
+- Dependabot (`.github/dependabot.yml`) proposes weekly updates for the Python
+  packages and the SHA-pinned GitHub Actions, after a 7-day cooldown. If its
+  pull request changes only one of the two requirements files, regenerate the
+  lock on its branch.
 
 ## Sources
 

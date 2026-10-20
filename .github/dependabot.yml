@@ -1,0 +1,28 @@
+# Weekly version updates for the Python packages and the SHA-pinned GitHub Actions.
+# Security updates are a separate repository setting and aren't delayed by the cooldown.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    # Leave new releases a week for the community to spot a compromised one.
+    cooldown:
+      default-days: 7
+    ignore:
+      # Every pySigma backend in requirements.in requires pySigma < 2.0.
+      - dependency-name: pysigma
+        update-types: [version-update:semver-major]
+    groups:
+      python:
+        patterns: ['*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
