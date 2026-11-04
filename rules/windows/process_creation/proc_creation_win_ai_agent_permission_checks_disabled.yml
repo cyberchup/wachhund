@@ -1,0 +1,62 @@
+title: Potential AI Coding Agent Execution with Permission Checks Disabled
+id: 8afb4574-8cf9-4baf-8264-de7e227f559f
+status: experimental
+description: |
+    Detects an AI coding agent CLI started with a flag that lets it run tools and shell commands without asking first: Claude Code's --dangerously-skip-permissions or bypassPermissions mode, OpenAI Codex's --dangerously-bypass-approvals-and-sandbox, --yolo or danger-full-access sandbox, GitHub Copilot CLI's --allow-all-tools or --yolo, and Gemini CLI's --yolo or yolo approval mode.
+    In the s1ngularity supply-chain attack on the Nx npm packages (August 2025), a malicious postinstall script ran the Claude Code and Gemini CLIs this way with a prompt telling them to search the user's files for secrets and wallets, so the agent did the collection for the malware.
+    An agent started like this by a script, a package install or in non-interactive mode (-p, exec) deserves a closer look than one a developer starts in a terminal.
+    Amazon Q's --trust-all-tools, used in the same attack, isn't covered: its CLI doesn't run natively on Windows.
+references:
+    - https://snyk.io/blog/weaponizing-ai-coding-agents-for-malware-in-the-nx-malicious-package/
+    - https://www.wiz.io/blog/s1ngularity-supply-chain-attack
+    - https://code.claude.com/docs/en/cli-reference
+    - https://learn.chatgpt.com/docs/developer-commands?surface=cli
+    - https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/allowing-tools
+    - https://geminicli.com/docs/cli/cli-reference/
+author: cyberchup
+date: 2026-10-20
+tags:
+    - attack.execution
+    - attack.t1059
+    - attack.collection
+    - attack.t1005
+logsource:
+    category: process_creation
+    product: windows
+    definition: 'Requirements: Sysmon EID 1 or Security 4688 with command-line auditing'
+detection:
+    selection_flag:
+        CommandLine|contains:
+            - '--dangerously-skip-permissions'
+            - 'bypassPermissions'
+            - '--dangerously-bypass-approvals-and-sandbox'
+            - 'danger-full-access'
+            - '--allow-all-tools'
+            - 'approval-mode=yolo'
+            - 'approval-mode yolo'
+    selection_yolo_flag:
+        CommandLine|contains: '--yolo'
+    selection_yolo_cli:
+        CommandLine|contains:
+            - 'codex'
+            - 'copilot'
+            - 'gemini'
+    condition: selection_flag or all of selection_yolo_*
+falsepositives:
+    - Developers running an agent unattended in a container, virtual machine or CI job, the use these flags are documented for
+    - Developers who start their agent this way by habit or through a shell alias
+level: medium
+regression_tests_path: regression_data/rules/windows/process_creation/proc_creation_win_ai_agent_permission_checks_disabled/info.yml
+simulation:
+    - type: manual
+      name: AI coding agent CLI run with permission checks disabled
+      technique: T1059
+      reason: Atomic Red Team has no test that runs an AI coding agent CLI (checked 2026-10-20).
+      steps: |
+          On ws01.hauslab.local, signed in as HAUSLAB\labuser, with Node.js LTS installed:
+          1. Install two agent CLIs: npm install -g @anthropic-ai/claude-code @openai/codex
+             They needn't be signed in. The rule matches the process start, before the CLI contacts its API.
+          2. In an empty folder such as C:\Users\labuser\agent-test, run:
+             claude --dangerously-skip-permissions -p "list the files in this folder"
+             codex exec --yolo "list the files in this folder"
+          3. Clean up: npm uninstall -g @anthropic-ai/claude-code @openai/codex, then delete the folder.
