@@ -1,0 +1,73 @@
+title: Potential Non-Browser Network Communication with LLM API
+id: 76448d7d-c0be-4c47-86ce-63d2001cccf9
+status: experimental
+description: |
+    Detects a process other than a web browser, an official AI desktop app or a code editor connecting to the API of a public large language model service: OpenAI, Anthropic, Google Gemini, Hugging Face inference, DeepSeek, Mistral, xAI, Groq, Together AI or OpenRouter.
+    Malware uses these APIs because most proxies let them through: APT28's LameHug (2025) asked a Qwen model hosted on Hugging Face to write the Windows commands it then ran, and the SesameOp backdoor (2025) used the OpenAI Assistants API as its command-and-control channel.
+    Scripts and tools that call these APIs with the user's own key match too, so expect tuning on developer workstations. The exclusions match the file name only.
+    Sysmon fills DestinationHostname with a reverse DNS lookup of the destination address, which for these CDN-hosted APIs usually returns a CDN name or nothing, so check that the telemetry has the API's name before relying on the rule. Microsoft's hunting query for SesameOp matches the same names in Defender for Endpoint's RemoteUrl.
+references:
+    - https://www.microsoft.com/en-us/security/blog/2025/11/03/sesameop-novel-backdoor-uses-openai-assistants-api-for-command-and-control/
+    - https://www.bleepingcomputer.com/news/security/lamehug-malware-uses-ai-llm-to-craft-windows-data-theft-commands-in-real-time/
+author: cyberchup
+date: 2026-10-20
+tags:
+    - attack.command-and-control
+    - attack.t1102
+    - attack.exfiltration
+    - attack.t1567
+logsource:
+    category: network_connection
+    product: windows
+    definition: 'Requirements: network connection events with the destination host name, from Defender for Endpoint or Sysmon EID 3 (see the description)'
+detection:
+    selection:
+        DestinationHostname|endswith:
+            - 'api.openai.com'
+            - 'api.anthropic.com'
+            - 'generativelanguage.googleapis.com'
+            - 'router.huggingface.co'
+            - 'api-inference.huggingface.co'
+            - 'api.deepseek.com'
+            - 'api.mistral.ai'
+            - 'api.x.ai'
+            - 'api.groq.com'
+            - 'api.together.xyz'
+            - 'openrouter.ai'
+    filter_main_browsers:
+        Image|endswith:
+            - '\brave.exe'
+            - '\chrome.exe'
+            - '\firefox.exe'
+            - '\msedge.exe'
+            - '\msedgewebview2.exe'
+            - '\opera.exe'
+            - '\vivaldi.exe'
+    filter_optional_ai_desktop_apps:
+        Image|endswith:
+            - '\ChatGPT.exe'
+            - '\claude.exe'
+    filter_optional_code_editors:
+        Image|endswith:
+            - '\Code.exe'
+            - '\Cursor.exe'
+            - '\Windsurf.exe'
+    condition: selection and not 1 of filter_main_* and not 1 of filter_optional_*
+falsepositives:
+    - Scripts, command-line tools and applications that call an LLM API with the user's own key, common on developer and data science workstations
+    - AI coding agent CLIs that run under node.exe or python.exe
+    - Browsers and AI apps not in the exclusions
+level: medium
+regression_tests_path: regression_data/rules/windows/network_connection/net_connection_win_domain_llm_api_non_browser_access/info.yml
+simulation:
+    - type: manual
+      name: Non-browser requests to public LLM APIs
+      technique: T1102
+      reason: Atomic Red Team has no test that calls an LLM API (checked 2026-10-20).
+      steps: |
+          On ws01.hauslab.local, signed in as HAUSLAB\labuser:
+          1. In PowerShell, run: Invoke-WebRequest -UseBasicParsing https://api.openai.com/v1/models
+             No API key is needed. The API refuses the request with 401, but the connection is made and logged.
+          2. Run: curl.exe -s https://api.anthropic.com/v1/models
+          3. In Discover, check that the network events for both connections have destination.domain set to the API's name rather than a CDN name. Without it the rule can't fire on Sysmon data.
+          Nothing to clean up.
